@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<module version="4">
+  <component name="NewModuleRootManager" inherit-compiler-output="true">
+    <exclude-output />
+    <content url="file://$MODULE_DIR$/src">
+      <sourceFolder url="file://$MODULE_DIR$/src/ru" isTestSource="false" />
+      <sourceFolder url="file://$MODULE_DIR$/src/ru/fomenkov" isTestSource="false" />
+    </content>
+    <content url="file://$MODULE_DIR$/test">
+      <sourceFolder url="file://$MODULE_DIR$/test" isTestSource="false" />
+      <sourceFolder url="file://$MODULE_DIR$/test/ru" isTestSource="false" />
+      <sourceFolder url="file://$MODULE_DIR$/test/ru/fomenkov" isTestSource="false" />
+    </content>
+    <orderEntry type="jdk" jdkName="Embedded JDK" jdkType="JavaSDK" />
+    <orderEntry type="sourceFolder" forTests="false" />
+    <orderEntry type="library" name="KotlinJavaRuntime" level="project" />
+    <orderEntry type="library" name="junit" level="project" />
+  </component>
+</module>
