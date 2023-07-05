@@ -23,16 +23,25 @@ class GitStatusParserTest {
                 "\n" +
                 "Untracked files:\n" +
                 "  (use \"git add <file>...\" to include in what will be committed)\n" +
-                "        project/FooBar.kt"
+                "        project/FooBar.kt\n" +
+                "\n" +
+                "\n" +
+                "It took 2.12 seconds to enumerate untracked files. 'status -uno'\n" +
+                "may speed it up, but you have to be careful not to forget to add\n" +
+                "new files yourself (see 'git help status').\n" +
+                "no changes added to commit (use \"git add\" and/or \"git commit -a\")"
 
         val parser = GitStatusParser(output.split('\n'))
 
         assertEquals(
-            setOf(
-                "project/FooBarDecorationRenamed.kt",
-                "project/FooBarFragment.kt",
-                "project/FooBarInteractor.kt",
-                "project/FooBar.kt",
+            GitStatusParser.Output(
+                branch = "my-test-branch",
+                files = setOf(
+                    "project/FooBarDecorationRenamed.kt",
+                    "project/FooBarFragment.kt",
+                    "project/FooBarInteractor.kt",
+                    "project/FooBar.kt",
+                ),
             ),
             parser.parse(),
         )

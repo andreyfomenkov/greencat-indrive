@@ -3,24 +3,35 @@ package ru.fomenkov
 import org.junit.After
 import org.junit.Before
 import org.junit.Test
+import plugin.KotlinCompiler
 import ru.fomenkov.async.WorkerTaskExecutor
 import ru.fomenkov.data.Repository
 import ru.fomenkov.parser.BuildGradleParser
+import ru.fomenkov.parser.GitStatusParser
 import ru.fomenkov.parser.SettingsGradleParser
+import ru.fomenkov.plugin.CompilationRoundsBuilder
+import ru.fomenkov.shell.Shell.exec
+import ru.fomenkov.shell.ShellCommandsValidator
 import ru.fomenkov.utils.Log
+import ru.fomenkov.utils.Utils
 import java.io.File
 import java.util.concurrent.Callable
 import kotlin.test.assertTrue
 
-// Setup Android project root as a working directory for Run/Debug configuration
+/**
+ * [1] Setup Android project root as a working directory for Run/Debug configuration
+ * [2] Modify files in project to get not empty `git status` command output (optional)
+ */
 class AndroidProjectIntegrationTest {
 
     private lateinit var executor: WorkerTaskExecutor
 
     @Before
     fun setup() {
-        Settings.isVerboseMode = true
+        Settings.isVerboseMode = false
         Settings.displayModuleDependencies = false
+        Repository.Modules.clear()
+        Repository.Graph.clear()
         executor = WorkerTaskExecutor()
     }
 
@@ -29,6 +40,9 @@ class AndroidProjectIntegrationTest {
         // Check working directory
         Log.d("Current working directory: ${File("").absolutePath}")
         assertTrue(File(Settings.SETTINGS_GRADLE_FILE_NAME).exists(), "No settings.gradle file found. Incorrect working directory?")
+
+        // Check shell commands
+        ShellCommandsValidator.validate()
 
         // Parse settings.gradle file
         val modules = timeMsec("Parsing settings.gradle") {
@@ -58,6 +72,10 @@ class AndroidProjectIntegrationTest {
         }
         assertTrue(deps.isNotEmpty(), "No modules and dependencies")
 
+        // Setup dependency graph
+        val graph = deps.associate { (module, deps) -> module to deps }
+        Repository.Graph.setup(graph)
+
         // Display module dependencies
         if (Settings.displayModuleDependencies) {
             deps.forEach { (module, deps) ->
@@ -65,6 +83,44 @@ class AndroidProjectIntegrationTest {
                 deps.forEach { dep -> Log.d(" - $dep") }
             }
         }
+
+        // Get project dirty files (see step [2] above)
+        val diff = exec("export LANG=en_US; git status")
+        val diffOutput = GitStatusParser(diff).parse()
+        Log.d("Current branch name: ${diffOutput.branch}")
+
+        // Split supported and not supported source files
+        val (supportedSourceFiles, unknownSourceFiles) = diffOutput.files.partition(Utils::isSourceFileSupported)
+
+        if (supportedSourceFiles.isEmpty() && unknownSourceFiles.isEmpty()) {
+            Log.d("\nNothing to compile")
+            return
+
+        } else if (supportedSourceFiles.isEmpty()) {
+            unknownSourceFiles.forEach { path -> Log.d(" - (NOT SUPPORTED) $path") }
+            Log.d("\nNo supported source files to compile")
+            return
+        }
+
+        // Compose compilation rounds
+        val rounds = CompilationRoundsBuilder(supportedSourceFiles.toSet()).build()
+        rounds.forEachIndexed { index, round ->
+            Log.d("Round ${index + 1}:")
+
+            round.items.entries.forEach { (module, sourcePaths) ->
+                sourcePaths.forEach { path ->
+                    Log.d(" - [${module.name}] $path")
+                }
+            }
+        }
+
+        // Compile
+//        KotlinCompiler(
+//            rounds = rounds,
+//            compilerPath = "",
+//            classpath = "",
+//            outputDir = "",
+//        ).run()
     }
 
     @After

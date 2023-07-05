@@ -2,15 +2,20 @@ package ru.fomenkov.parser
 
 class GitStatusParser(private val input: List<String>) {
 
-    fun parse(): Set<String> {
+    data class Output(val branch: String, val files: Set<String>)
+
+    fun parse(): Output {
+        var branch = ""
         val paths = mutableSetOf<String>()
         var inUntrackedSection = false
 
         input
-            .filter(String::isNotBlank)
             .map(String::trim)
             .forEach { line ->
                 when {
+                    branch.isBlank() && line.startsWith("on branch", ignoreCase = true) -> {
+                        branch = line.substring(9, line.length).trim()
+                    }
                     line.startsWith("modified: ") -> {
                         val index = line.indexOf("modified:")
                         check(index != -1) { "Failed to parse line: $line" }
@@ -22,13 +27,19 @@ class GitStatusParser(private val input: List<String>) {
                         paths += line.substring(index + 3, line.length).trim()
                     }
                     inUntrackedSection && !line.startsWith('(') -> {
-                        paths += line.trim()
+                        if (line.isBlank() || line.contains('\'')) {
+                            check(branch.isNotBlank()) { "No branch name parsed" }
+                            return Output(branch, paths)
+                        } else {
+                            paths += line.trim()
+                        }
                     }
                 }
                 if (line.startsWith("Untracked files:")) {
                     inUntrackedSection = true
                 }
             }
-        return paths.toSet()
+        check(branch.isNotBlank()) { "No branch name parsed" }
+        return Output(branch, paths)
     }
 }

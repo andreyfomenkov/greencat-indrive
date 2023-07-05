@@ -4,36 +4,6 @@ import ru.fomenkov.data.Dependency
 import ru.fomenkov.utils.Log
 import java.io.File
 
-/*
-dependencies {
-    implementation(
-            project(':geo:common'),
-            project(':geo:map-google'),
-            project(':geo:map-libregl'),
-            project(':geo:map-osm'),
-
-            libs.androidx.appcompat,
-            libs.androidx.constraintlayout,
-            libs.androidx.corektx,
-            libs.androidx.material,
-            libs.dagger,
-            libs.kotlinx.serialization.json,
-            libs.lifecycle.common,
-            libs.rx.android,
-            libs.rx.java,
-    )
-    api(
-            project(':geo:map-api'),
-    )
-
-    kapt libs.dagger.compiler
-
-    testImplementation(
-            libs.test.junit,
-            libs.test.mockk,
-    )
-}
- */
 
 class BuildGradleParser(private val path: String) {
 

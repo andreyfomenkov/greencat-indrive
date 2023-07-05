@@ -4,7 +4,7 @@ import ru.fomenkov.data.Module
 
 object Utils {
 
-    inline fun timeMsec(action: () -> Unit): Long {
+    fun timeMsec(action: () -> Unit): Long {
         val start = System.currentTimeMillis()
         action()
         val end = System.currentTimeMillis()
@@ -16,4 +16,13 @@ object Utils {
         name = name,
         path = name.replace(':', '/'),
     )
+
+    fun isSourceFileSupported(path: String): Boolean {
+        with(path.trim()) {
+            if (endsWith(".kt")) {
+                return true
+            }
+        }
+        return false
+    }
 }
