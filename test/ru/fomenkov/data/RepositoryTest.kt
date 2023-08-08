@@ -1,13 +1,10 @@
 package ru.fomenkov.data
 
+import org.junit.Assert.*
 import org.junit.Before
 import org.junit.Test
 import ru.fomenkov.Settings
 import ru.fomenkov.utils.Utils
-import kotlin.test.assertEquals
-import kotlin.test.assertFalse
-import kotlin.test.assertNull
-import kotlin.test.assertTrue
 
 class RepositoryTest {
 
@@ -100,15 +97,15 @@ class RepositoryTest {
         Repository.Graph.setup(graph)
 
         assertEquals(
-            emptySet(),
+            emptySet<Module>(),
             Repository.Graph.getChildModules(toModule("app")),
         )
         assertEquals(
-            emptySet(),
+            emptySet<Module>(),
             Repository.Graph.getChildModules(toModule("m1:m2")),
         )
         assertEquals(
-            emptySet(),
+            emptySet<Module>(),
             Repository.Graph.getChildModules(toModule("m3:m4:m5")),
         )
         assertNull(
@@ -243,17 +240,17 @@ class RepositoryTest {
 
     private fun assertChildModules(root: String, vararg children: String) {
         assertEquals(
+            "Unexpected child modules for module $root",
             children.toSet(),
             Repository.Graph.getChildModules(toModule(root))?.map { module -> module.name }?.toSet(),
-            "Unexpected child modules for module $root",
         )
     }
 
     private fun assertDependencies(root: String, children: Set<String>) {
         children.forEach { child ->
             assertTrue(
-                Repository.Graph.isDependency(root = toModule(root), child = toModule(child)),
                 "Module '$root' has no '$child' module dependency",
+                Repository.Graph.isDependency(root = toModule(root), child = toModule(child)),
             )
         }
     }
@@ -261,8 +258,8 @@ class RepositoryTest {
     private fun assertNotDependencies(root: String, children: Set<String>) {
         children.forEach { child ->
             assertFalse(
-                Repository.Graph.isDependency(root = toModule(root), child = toModule(child)),
                 "Module '$root' has '$child' module dependency",
+                Repository.Graph.isDependency(root = toModule(root), child = toModule(child)),
             )
         }
     }

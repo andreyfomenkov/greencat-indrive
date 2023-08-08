@@ -1,9 +1,9 @@
 package ru.fomenkov
 
 import org.junit.After
+import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
-import plugin.KotlinCompiler
 import ru.fomenkov.async.WorkerTaskExecutor
 import ru.fomenkov.data.Repository
 import ru.fomenkov.parser.BuildGradleParser
@@ -16,7 +16,6 @@ import ru.fomenkov.utils.Log
 import ru.fomenkov.utils.Utils
 import java.io.File
 import java.util.concurrent.Callable
-import kotlin.test.assertTrue
 
 /**
  * [1] Setup Android project root as a working directory for Run/Debug configuration
@@ -39,7 +38,7 @@ class AndroidProjectIntegrationTest {
     fun `Verify project structure`() {
         // Check working directory
         Log.d("Current working directory: ${File("").absolutePath}")
-        assertTrue(File(Settings.SETTINGS_GRADLE_FILE_NAME).exists(), "No settings.gradle file found. Incorrect working directory?")
+        assertTrue("No settings.gradle file found. Incorrect working directory?", File(Settings.SETTINGS_GRADLE_FILE_NAME).exists())
 
         // Check shell commands
         ShellCommandsValidator.validate()
@@ -49,7 +48,7 @@ class AndroidProjectIntegrationTest {
             SettingsGradleParser(Settings.SETTINGS_GRADLE_FILE_NAME).parse()
         }
         Repository.Modules.setup(modules)
-        assertTrue(modules.isNotEmpty(), "No Gradle modules parsed")
+        assertTrue("No Gradle modules parsed", modules.isNotEmpty())
 
         // Check build.gradle files exist for declared modules
         val buildFilePaths = modules.map { module ->
@@ -57,7 +56,7 @@ class AndroidProjectIntegrationTest {
         }
         buildFilePaths.forEach { path ->
             val exists = File(path).exists()
-            assertTrue(exists, "Build file doesn't exist: $path")
+            assertTrue("Build file doesn't exist: $path", exists)
         }
 
         // Parse build.gradle files for declared modules
@@ -70,7 +69,7 @@ class AndroidProjectIntegrationTest {
                 }
             }.run { executor.run(this) }
         }
-        assertTrue(deps.isNotEmpty(), "No modules and dependencies")
+        assertTrue("No modules and dependencies", deps.isNotEmpty())
 
         // Setup dependency graph
         val graph = deps.associate { (module, deps) -> module to deps }

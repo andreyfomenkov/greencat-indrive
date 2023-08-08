@@ -1,12 +1,12 @@
 package ru.fomenkov.plugin
 
+import org.junit.Assert.assertEquals
 import org.junit.Before
 import org.junit.Test
 import ru.fomenkov.Settings
 import ru.fomenkov.data.Dependency
 import ru.fomenkov.data.Repository
 import ru.fomenkov.utils.Utils
-import kotlin.test.assertEquals
 
 class CompilationRoundsBuilderTest {
 

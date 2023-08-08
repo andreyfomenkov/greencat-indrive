@@ -1,10 +1,8 @@
 package ru.fomenkov.utils
 
+import org.junit.Assert.*
 import org.junit.Test
 import ru.fomenkov.data.Module
-import kotlin.test.assertEquals
-import kotlin.test.assertFalse
-import kotlin.test.assertTrue
 
 class UtilsTest {
 

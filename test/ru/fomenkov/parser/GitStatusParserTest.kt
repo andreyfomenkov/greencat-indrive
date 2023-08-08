@@ -1,7 +1,7 @@
 package ru.fomenkov.parser
 
+import org.junit.Assert.assertEquals
 import org.junit.Test
-import kotlin.test.assertEquals
 
 class GitStatusParserTest {
 
