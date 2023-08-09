@@ -35,7 +35,7 @@ class AndroidProjectIntegrationTest {
     }
 
     @Test
-    fun `Verify project structure`() {
+    fun `Test plugin workflow`() {
         // Check working directory
         Log.d("Current working directory: ${File("").absolutePath}")
         assertTrue("No settings.gradle file found. Incorrect working directory?", File(Settings.SETTINGS_GRADLE_FILE_NAME).exists())
@@ -92,17 +92,18 @@ class AndroidProjectIntegrationTest {
         val (supportedSourceFiles, unknownSourceFiles) = diffOutput.files.partition(Utils::isSourceFileSupported)
 
         if (supportedSourceFiles.isEmpty() && unknownSourceFiles.isEmpty()) {
-            Log.d("\nNothing to compile")
+            Log.d("\nNothing to compile. Please modify supported files to proceed")
             return
 
         } else if (supportedSourceFiles.isEmpty()) {
             unknownSourceFiles.forEach { path -> Log.d(" - (NOT SUPPORTED) $path") }
-            Log.d("\nNo supported source files to compile")
+            Log.d("\nNo supported source files to compile. Please modify supported files to proceed")
             return
         }
 
         // Compose compilation rounds
         val rounds = CompilationRoundsBuilder(supportedSourceFiles.toSet()).build()
+
         rounds.forEachIndexed { index, round ->
             Log.d("Round ${index + 1}:")
 
@@ -112,14 +113,6 @@ class AndroidProjectIntegrationTest {
                 }
             }
         }
-
-        // Compile
-//        KotlinCompiler(
-//            rounds = rounds,
-//            compilerPath = "",
-//            classpath = "",
-//            outputDir = "",
-//        ).run()
     }
 
     @After

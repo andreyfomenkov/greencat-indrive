@@ -6,6 +6,7 @@ import org.junit.Test
 import ru.fomenkov.Settings
 import ru.fomenkov.data.Dependency
 import ru.fomenkov.data.Repository
+import ru.fomenkov.data.Round
 import ru.fomenkov.utils.Utils
 
 class CompilationRoundsBuilderTest {

@@ -2,6 +2,7 @@ package ru.fomenkov.plugin
 
 import ru.fomenkov.data.Module
 import ru.fomenkov.data.Repository
+import ru.fomenkov.data.Round
 import ru.fomenkov.utils.Log
 
 class CompilationRoundsBuilder(private val sources: Set<String>) {
@@ -63,5 +64,3 @@ class CompilationRoundsBuilder(private val sources: Set<String>) {
         return true
     }
 }
-
-data class Round(val items: Map<Module, Set<String>>)

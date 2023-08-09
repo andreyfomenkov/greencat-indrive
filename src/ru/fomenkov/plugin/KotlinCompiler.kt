@@ -1,6 +1,6 @@
-package plugin
+package ru.fomenkov.plugin
 
-import ru.fomenkov.plugin.Round
+import ru.fomenkov.data.Round
 import ru.fomenkov.shell.Shell.exec
 import ru.fomenkov.utils.Log
 import java.io.File
