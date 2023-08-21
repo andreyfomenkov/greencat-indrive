@@ -6,8 +6,8 @@ object ShellCommandsValidator {
 
     fun validate() {
         setOf("git", "rm", "javac").forEach { cmd ->
-            val exists = exec("command -v $cmd").isNotEmpty()
-            check(exists) { "Command '$cmd' not found" }
+            val (exists) = exec("command -v $cmd")
+            check(exists.isNotEmpty()) { "Command '$cmd' not found" }
         }
     }
 }

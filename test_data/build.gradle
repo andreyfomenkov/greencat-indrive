@@ -1,0 +1,40 @@
+plugins {
+    id "kotlin-parcelize"
+    id "kotlin-kapt"
+    id "kotlinx-serialization"
+}
+
+android {
+    namespace 'sample.namespace'
+    buildFeatures {
+        viewBinding true
+    }
+}
+
+dependencies {
+    api(
+            project(':m1:sub1'),
+            project(':m1:sub2'),
+    )
+
+    implementation(
+            project(' :m2:sub1'),
+            project(':m2:sub2 '),
+            project('  :m2:sub3:sub4  '),
+
+            project(" :m3:sub1"),
+            project(":m3:sub2 "),
+            project("  :m3:sub3:sub4  "),
+
+            libs.sample.lib1,
+            libs.sample.lib2,
+            libs.sample.lib3,
+    )
+
+    kapt libs.sample.kapt
+
+    testImplementation(
+            libs.sample.test1,
+            libs.sample.test2,
+    )
+}

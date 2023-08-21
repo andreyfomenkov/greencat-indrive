@@ -2,7 +2,6 @@ package ru.fomenkov.plugin.strategy
 
 import ru.fomenkov.data.Module
 import ru.fomenkov.data.Round
-import ru.fomenkov.utils.Log
 import java.io.File
 
 object CompilationStrategySelector {
@@ -23,7 +22,6 @@ object CompilationStrategySelector {
                 }
             }
         }
-        val sourcesCount = daggerGraphSources.size + plainSources.size
         val strategy = when {
             daggerGraphSources.isNotEmpty() -> {
                 KaptCompilationStrategy()
@@ -33,7 +31,6 @@ object CompilationStrategySelector {
             }
             else -> error("No sources found")
         }
-        Log.v("[Round] $sourcesCount source file(s) -> performing ${strategy.javaClass.simpleName}")
         return strategy
     }
 

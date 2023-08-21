@@ -4,6 +4,7 @@ import org.junit.After
 import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
+import ru.fomenkov.Settings
 import ru.fomenkov.data.Module
 import ru.fomenkov.data.Round
 import java.io.File
@@ -15,6 +16,7 @@ class CompilationStrategySelectorTest {
 
     @Before
     fun setup() {
+        Settings.isVerboseMode = true
         createTestFileSystemDirectory()
     }
 

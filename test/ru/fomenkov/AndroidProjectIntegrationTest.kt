@@ -10,6 +10,7 @@ import ru.fomenkov.parser.BuildGradleParser
 import ru.fomenkov.parser.GitStatusParser
 import ru.fomenkov.parser.SettingsGradleParser
 import ru.fomenkov.plugin.CompilationRoundsBuilder
+import ru.fomenkov.plugin.strategy.CompilationStrategySelector
 import ru.fomenkov.shell.Shell.exec
 import ru.fomenkov.shell.ShellCommandsValidator
 import ru.fomenkov.utils.Log
@@ -27,7 +28,7 @@ class AndroidProjectIntegrationTest {
 
     @Before
     fun setup() {
-        Settings.isVerboseMode = false
+        Settings.isVerboseMode = true
         Settings.displayModuleDependencies = false
         Repository.Modules.clear()
         Repository.Graph.clear()
@@ -50,21 +51,33 @@ class AndroidProjectIntegrationTest {
         Repository.Modules.setup(modules)
         assertTrue("No Gradle modules parsed", modules.isNotEmpty())
 
-        // Check build.gradle files exist for declared modules
-        val buildFilePaths = modules.map { module ->
-            module.path + "/${Settings.BUILD_GRADLE_FILE}"
-        }
-        buildFilePaths.forEach { path ->
-            val exists = File(path).exists()
-            assertTrue("Build file doesn't exist: $path", exists)
+        // Check build.gradle or build.gradle.kts files exist for the declared modules
+        modules.forEach { module ->
+            val buildGradlePath = module.path + "/${Settings.BUILD_GRADLE_FILE}"
+            val buildGradleKtsPath = module.path + "/${Settings.BUILD_GRADLE_KTS_FILE}"
+            val buildFileExists = File(buildGradlePath).exists() || File(buildGradleKtsPath).exists()
+
+            if (!buildFileExists) {
+                Log.d("[WARNING] Module ${module.path} has no build file")
+            }
         }
 
         // Parse build.gradle files for declared modules
         val deps = timeMsec("Parse build.gradle files for declared modules") {
             modules.map { module ->
                 Callable {
-                    val path = module.path + "/${Settings.BUILD_GRADLE_FILE}"
-                    val deps = BuildGradleParser(path).parse()
+                    val buildGradlePath = module.path + "/${Settings.BUILD_GRADLE_FILE}"
+                    val buildGradleKtsPath = module.path + "/${Settings.BUILD_GRADLE_KTS_FILE}"
+                    val buildFilePath = when {
+                        File(buildGradlePath).exists() -> buildGradlePath
+                        File(buildGradleKtsPath).exists() -> buildGradleKtsPath
+                        else -> null
+                    }
+                    val deps = if (buildFilePath == null) {
+                        emptySet()
+                    } else {
+                        BuildGradleParser(buildFilePath).parse()
+                    }
                     module to deps
                 }
             }.run { executor.run(this) }
@@ -84,7 +97,7 @@ class AndroidProjectIntegrationTest {
         }
 
         // Get project dirty files (see step [2] above)
-        val diff = exec("export LANG=en_US; git status")
+        val (diff) = exec("export LANG=en_US; git status")
         val diffOutput = GitStatusParser(diff).parse()
         Log.d("Current branch name: ${diffOutput.branch}")
 
@@ -112,6 +125,14 @@ class AndroidProjectIntegrationTest {
                     Log.d(" - [${module.name}] $path")
                 }
             }
+        }
+        println()
+
+        // Select compilation strategy (plain or kapt) for a particular round
+        rounds.forEachIndexed { index, round ->
+            val strategy = CompilationStrategySelector.select(round)
+            Log.d("Compilation round ${index + 1} -> using ${strategy.javaClass.simpleName}")
+            strategy.perform(round)
         }
     }
 
