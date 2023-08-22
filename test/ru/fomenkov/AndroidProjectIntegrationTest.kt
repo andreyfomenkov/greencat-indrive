@@ -4,7 +4,7 @@ import org.junit.After
 import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
-import ru.fomenkov.async.WorkerTaskExecutor
+import ru.fomenkov.utils.WorkerTaskExecutor
 import ru.fomenkov.data.Repository
 import ru.fomenkov.parser.BuildGradleParser
 import ru.fomenkov.parser.GitStatusParser
@@ -13,6 +13,7 @@ import ru.fomenkov.plugin.CompilationRoundsBuilder
 import ru.fomenkov.plugin.strategy.CompilationStrategySelector
 import ru.fomenkov.shell.Shell.exec
 import ru.fomenkov.shell.ShellCommandsValidator
+import ru.fomenkov.utils.CompilerModuleNameResolver
 import ru.fomenkov.utils.Log
 import ru.fomenkov.utils.Utils
 import java.io.File
@@ -30,13 +31,18 @@ class AndroidProjectIntegrationTest {
     fun setup() {
         Settings.isVerboseMode = true
         Settings.displayModuleDependencies = false
+        Settings.displayResolvingChildModules = false
+        Settings.displayKotlinCompilerModuleNames = false
         Repository.Modules.clear()
         Repository.Graph.clear()
+        Repository.CompilerModuleNameParam.clear()
         executor = WorkerTaskExecutor()
     }
 
     @Test
     fun `Test plugin workflow`() {
+        val compileTimeStart = System.currentTimeMillis()
+
         // Check working directory
         Log.d("Current working directory: ${File("").absolutePath}")
         assertTrue("No settings.gradle file found. Incorrect working directory?", File(Settings.SETTINGS_GRADLE_FILE_NAME).exists())
@@ -50,6 +56,20 @@ class AndroidProjectIntegrationTest {
         }
         Repository.Modules.setup(modules)
         assertTrue("No Gradle modules parsed", modules.isNotEmpty())
+
+        // Resolve module names for Kotlin compiler `-module-name` param
+        Log.v(Settings.displayKotlinCompilerModuleNames, "[Kotlin compiler module names]")
+        modules.forEach { module ->
+            val paths = CompilerModuleNameResolver.getPossibleBuildPaths(module)
+            val name = CompilerModuleNameResolver.resolve(paths)
+
+            if (name.isBlank()) {
+                Log.v(Settings.displayKotlinCompilerModuleNames, "????????? -> [${module.name}]")
+            } else {
+                Log.v(Settings.displayKotlinCompilerModuleNames, "$name -> [${module.name}]")
+            }
+            Repository.CompilerModuleNameParam.set(module, name)
+        }
 
         // Check build.gradle or build.gradle.kts files exist for the declared modules
         modules.forEach { module ->
@@ -118,7 +138,7 @@ class AndroidProjectIntegrationTest {
         val rounds = CompilationRoundsBuilder(supportedSourceFiles.toSet()).build()
 
         rounds.forEachIndexed { index, round ->
-            Log.d("Round ${index + 1}:")
+            Log.d("\nRound ${index + 1}:")
 
             round.items.entries.forEach { (module, sourcePaths) ->
                 sourcePaths.forEach { path ->
@@ -134,6 +154,9 @@ class AndroidProjectIntegrationTest {
             Log.d("Compilation round ${index + 1} -> using ${strategy.javaClass.simpleName}")
             strategy.perform(round)
         }
+        val compileTimeEnd = System.currentTimeMillis()
+
+        Log.d("# Compilation time: ${(compileTimeEnd - compileTimeStart) / 1000} sec #")
     }
 
     @After

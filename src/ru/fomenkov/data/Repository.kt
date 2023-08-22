@@ -1,5 +1,6 @@
 package ru.fomenkov.data
 
+import ru.fomenkov.Settings
 import ru.fomenkov.utils.Log
 import ru.fomenkov.utils.Utils
 import ru.fomenkov.utils.noTilda
@@ -49,8 +50,8 @@ object Repository {
 
         private fun resolveChildModules(modulesMap: Map<String, Set<Dependency.Module>>, name: String): Set<Module> {
             val children = checkNotNull(modulesMap[name]) { "No module for name: $name" }.toMutableSet()
-            Log.v("Resolving modules for '$name'")
-            Log.v(" - children: $children")
+            Log.v(Settings.displayResolvingChildModules, "Resolving modules for '$name'")
+            Log.v(Settings.displayResolvingChildModules, " - children: $children")
 
             while (true) {
                 val iterator = children.iterator()
@@ -68,12 +69,12 @@ object Repository {
                 if (resolvedModules.isEmpty()) {
                     break
                 } else {
-                    Log.v(" + transitive: $resolvedModules")
+                    Log.v(Settings.displayResolvingChildModules, " + transitive: $resolvedModules")
                     children += resolvedModules
                     resolvedModules.clear()
                 }
             }
-            Log.v(" > output: $children\n")
+            Log.v(Settings.displayResolvingChildModules, " > output: $children\n")
             return children.map { module -> Utils.toModule(module.name) }.toSet()
         }
 
@@ -98,5 +99,22 @@ object Repository {
             .filterNot { path -> path.endsWith(".xml") ||  path.endsWith("/res") }
             .filter { path -> File(path).exists() }
             .toSet()
+    }
+
+    /**
+     * Used by Kotlin compiler for `-module-name` param
+     */
+    object CompilerModuleNameParam {
+        private val moduleNameParam = mutableMapOf<Module, String>()
+
+        fun set(module: Module, name: String) {
+            moduleNameParam[module] = name
+        }
+
+        fun get(module: Module) = moduleNameParam[module]
+
+        fun clear() {
+            moduleNameParam.clear()
+        }
     }
 }

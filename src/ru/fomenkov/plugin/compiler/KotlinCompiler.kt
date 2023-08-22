@@ -3,9 +3,9 @@ package ru.fomenkov.plugin.compiler
 import ru.fomenkov.data.Round
 import ru.fomenkov.shell.CommandBuilder
 import ru.fomenkov.shell.Shell.exec
-import ru.fomenkov.utils.escapeSpaces
-import ru.fomenkov.utils.pathExists
+import ru.fomenkov.utils.*
 import java.io.File
+import java.util.concurrent.Callable
 
 class KotlinCompiler(
     private val round: Round,
@@ -19,36 +19,53 @@ class KotlinCompiler(
 
     override fun run(): Boolean {
         check(compilerPath.pathExists()) { "No compiler found: $compilerPath" }
+        Log.v("")
 
-        val allSourcePaths = extractAllSourcePaths(round).joinToString(separator = " ")
-        val classpathStr = classpath.joinToString(separator = ":")
-        val cmd = CommandBuilder(compilerPath.escapeSpaces())
-            .param("-classpath", classpathStr)
-//            .param("-Xjvm-default=all-compatibility")
-//            .param("-Xuse-fast-jar-file-system")
-//            .param("-module-name", getModuleName())
-            .withPlugins(plugins)
-            .param(composeFriendModulesParam())
-            .param("-d", outputDir)
-            .param(allSourcePaths)
-            .build()
-        val result = exec(cmd)
-        output.clear()
-        output += result.output
+        val tasks = round.items.map { (module, sources) ->
+            val buildPaths = CompilerModuleNameResolver.getPossibleBuildPaths(module)
+            val moduleNameParam = CompilerModuleNameResolver.resolve(buildPaths)
 
-        return result.successful
+            Log.v("Task `$moduleNameParam` has ${sources.size} source(s)")
+            createCompilerTask(moduleNameParam, sources)
+        }
+        val executor = WorkerTaskExecutor()
+        val results = try {
+            executor.run(tasks)
+        } catch (error: Throwable) {
+            Log.v("Failed to run compiler task(s): ${error.localizedMessage}")
+            return false
+
+        } finally {
+            executor.release()
+        }
+        results.forEach { result ->
+            if (!result.successful) {
+                output += result.output
+            }
+        }
+        return results.find { result -> !result.successful } == null
     }
 
     override fun output() = output
 
-    private fun extractAllSourcePaths(round: Round): Set<String> {
-        val paths = mutableSetOf<String>()
-        round.items.values.forEach { paths += it }
-        return paths
-    }
-
-    private fun getModuleName(): String {
-        return "main_debug" // TODO: or app_gmsInDriverDebug? (see build logs)
+    private fun createCompilerTask(moduleNameParam: String, sources: Set<String>) = Callable {
+        Log.v("Starting task `$moduleNameParam` with ${sources.size} source(s) on thread [${Thread.currentThread().id}]")
+        val startTime = System.currentTimeMillis()
+        val classpathStr = classpath.joinToString(separator = ":")
+        val cmd = CommandBuilder(compilerPath.escapeSpaces())
+            .param("-classpath", classpathStr)
+            .param("-Xjvm-default=all-compatibility")
+            .param("-Xuse-fast-jar-file-system")
+            .param("-module-name", moduleNameParam)
+            .withPlugins(plugins)
+            .param(composeFriendModulesParam())
+            .param("-d", outputDir)
+            .param(sources.joinToString(separator = " "))
+            .build()
+        val result = exec(cmd)
+        val endTime = System.currentTimeMillis()
+        Log.v("Task `$moduleNameParam` complete in ${(endTime - startTime) / 1000} sec")
+        result
     }
 
     private fun composeFriendModulesParam(): String {

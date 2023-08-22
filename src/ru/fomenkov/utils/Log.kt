@@ -17,4 +17,10 @@ object Log {
             println(message)
         }
     }
+
+    fun v(display: Boolean, message: String) {
+        if (display && Settings.isVerboseMode) {
+            println(message)
+        }
+    }
 }

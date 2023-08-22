@@ -3,8 +3,11 @@ package ru.fomenkov
 import java.io.File
 
 object Settings {
-    var isVerboseMode = false // Used for testing
+    // User for testing
+    var isVerboseMode = false
     var displayModuleDependencies = false
+    var displayResolvingChildModules = false
+    var displayKotlinCompilerModuleNames = false
 
     val currentDir: String = File("").absolutePath
     const val SETTINGS_GRADLE_FILE_NAME = "settings.gradle"

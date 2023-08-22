@@ -19,7 +19,11 @@ class PlainCompilationStrategy : CompilationStrategy {
             classpath = Repository.Classpath.forProject,
             outputDir = Params.BUILD_PATH_INTERMEDIATE,
         )
-        compiler.run()
-        compiler.output().forEach(Log::d)
+        if (compiler.run()) {
+            Log.v("\nRound compilation OK")
+        } else {
+            Log.v("\nRound compilation FAILED:")
+            compiler.output().forEach(Log::v)
+        }
     }
 }

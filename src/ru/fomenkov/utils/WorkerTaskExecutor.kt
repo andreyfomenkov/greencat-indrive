@@ -1,4 +1,4 @@
-package ru.fomenkov.async
+package ru.fomenkov.utils
 
 import java.util.concurrent.Callable
 import java.util.concurrent.Executors
