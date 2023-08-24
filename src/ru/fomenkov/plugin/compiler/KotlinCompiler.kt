@@ -64,7 +64,7 @@ class KotlinCompiler(
             .build()
         val result = exec(cmd)
         val endTime = System.currentTimeMillis()
-        Log.v("Task `$moduleNameParam` complete in ${(endTime - startTime) / 1000} sec")
+        Log.v("Complete task `$moduleNameParam` in ${(endTime - startTime) / 1000} sec")
         result
     }
 
