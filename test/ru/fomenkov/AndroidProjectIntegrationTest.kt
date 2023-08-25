@@ -9,7 +9,9 @@ import ru.fomenkov.data.Repository
 import ru.fomenkov.parser.BuildGradleParser
 import ru.fomenkov.parser.GitStatusParser
 import ru.fomenkov.parser.SettingsGradleParser
+import ru.fomenkov.plugin.ClassFileSignatureSupplier
 import ru.fomenkov.plugin.CompilationRoundsBuilder
+import ru.fomenkov.plugin.compiler.Params
 import ru.fomenkov.plugin.strategy.CompilationStrategySelector
 import ru.fomenkov.shell.Shell.exec
 import ru.fomenkov.shell.ShellCommandsValidator
@@ -49,6 +51,9 @@ class AndroidProjectIntegrationTest {
 
         // Check shell commands
         ShellCommandsValidator.validate()
+
+        // Remove intermediate build directory
+        exec("rm -rf ${Params.BUILD_PATH_INTERMEDIATE}")
 
         // Parse settings.gradle file
         val modules = timeMsec("Parsing settings.gradle") {
@@ -157,6 +162,32 @@ class AndroidProjectIntegrationTest {
         val compileTimeEnd = System.currentTimeMillis()
 
         Log.d("# Compilation time: ${(compileTimeEnd - compileTimeStart) / 1000} sec #")
+
+        // Add Greencat signature for all generated .class files
+        val signatureTimeStart = System.currentTimeMillis()
+        var classFilesCount = 0
+
+        exec("find ${Params.BUILD_PATH_INTERMEDIATE} -name '*.class'").let { result ->
+            if (result.successful) {
+                check(result.output.isNotEmpty()) { "No .class files found" }
+                classFilesCount = result.output.size
+
+                result.output.forEach { path ->
+                    if (!ClassFileSignatureSupplier.run(path, path)) {
+                        error("Failed to add signature into file: $path")
+                    }
+                }
+            } else {
+                error("Failed to list all .class files in ${Params.BUILD_PATH_INTERMEDIATE} directory")
+            }
+        }
+        val signatureTimeEnd = System.currentTimeMillis()
+        Log.d("\n$classFilesCount signature(s) were added in ${signatureTimeEnd - signatureTimeStart} ms")
+
+        // Copy intermediate build directory into final recursively
+        check(
+            exec("cp -r ${Params.BUILD_PATH_INTERMEDIATE} ${Params.BUILD_PATH_FINAL}").successful
+        ) { "Failed to copy intermediate build directory into final" }
     }
 
     @After

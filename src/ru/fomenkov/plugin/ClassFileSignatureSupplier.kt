@@ -10,7 +10,7 @@ import ru.fomenkov.utils.Log
 object ClassFileSignatureSupplier {
 
     private const val FIELD_NAME = "\$GREENCAT_SIGNATURE_SYNTHETIC"
-    private const val FIELD_VALUE = "CATLOAF ^._.^"
+    private const val FIELD_VALUE = "^._.^"
 
     fun run(
         srcClassFilePath: String,
@@ -32,6 +32,7 @@ object ClassFileSignatureSupplier {
 
         } catch (error: Throwable) {
             Log.v("Failed to add signature into class file: ${error.localizedMessage}")
+            Log.v(error.stackTraceToString())
             return false
         }
         return true
