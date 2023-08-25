@@ -1,9 +1,8 @@
 package ru.fomenkov.plugin.compiler
 
-object Params {
-    // Compiler params
-    const val COMPILE_JVM_TARGET = "1.8"
+import ru.fomenkov.utils.noTilda
 
+object Params {
     // Compiler and plugins
     private const val KOTLIN_PLUGIN_PATH = "/Applications/Android Studio.app/Contents/plugins/Kotlin"
     const val KOTLINC = "$KOTLIN_PLUGIN_PATH/kotlinc/bin/kotlinc"
@@ -13,4 +12,10 @@ object Params {
     private const val GREENCAT_ROOT_PATH = "greencat"
     const val BUILD_PATH_FINAL = "$GREENCAT_ROOT_PATH/build/final"
     const val BUILD_PATH_INTERMEDIATE = "$GREENCAT_ROOT_PATH/build/intermediate"
+    const val DEX_FILE_PATH = GREENCAT_ROOT_PATH
+
+    // Android SDK and tools paths
+    val ANDROID_SDK_ROOT_PATH = "~/Library/Android/sdk".noTilda()
+    val BUILD_TOOLS_PATH = "$ANDROID_SDK_ROOT_PATH/build-tools"
+    val DEX_PATCH_DEFAULT_NAME = "classes.dex"
 }

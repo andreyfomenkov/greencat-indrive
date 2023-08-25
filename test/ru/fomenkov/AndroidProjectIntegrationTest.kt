@@ -11,6 +11,7 @@ import ru.fomenkov.parser.GitStatusParser
 import ru.fomenkov.parser.SettingsGradleParser
 import ru.fomenkov.plugin.ClassFileSignatureSupplier
 import ru.fomenkov.plugin.CompilationRoundsBuilder
+import ru.fomenkov.plugin.compiler.DexPatchCompiler
 import ru.fomenkov.plugin.compiler.Params
 import ru.fomenkov.plugin.strategy.CompilationStrategySelector
 import ru.fomenkov.shell.Shell.exec
@@ -43,7 +44,7 @@ class AndroidProjectIntegrationTest {
 
     @Test
     fun `Test plugin workflow`() {
-        val compileTimeStart = System.currentTimeMillis()
+        val totalTimeStart = System.currentTimeMillis()
 
         // Check working directory
         Log.d("Current working directory: ${File("").absolutePath}")
@@ -151,9 +152,11 @@ class AndroidProjectIntegrationTest {
                 }
             }
         }
-        println()
+        Log.d("")
 
         // Select compilation strategy (plain or kapt) for a particular round
+        val compileTimeStart = System.currentTimeMillis()
+
         rounds.forEachIndexed { index, round ->
             val strategy = CompilationStrategySelector.select(round)
             Log.d("Compilation round ${index + 1} -> using ${strategy.javaClass.simpleName}")
@@ -161,7 +164,7 @@ class AndroidProjectIntegrationTest {
         }
         val compileTimeEnd = System.currentTimeMillis()
 
-        Log.d("# Compilation time: ${(compileTimeEnd - compileTimeStart) / 1000} sec #")
+        Log.d("Compilation time: ${(compileTimeEnd - compileTimeStart) / 1000} sec")
 
         // Add Greencat signature for all generated .class files
         val signatureTimeStart = System.currentTimeMillis()
@@ -185,9 +188,34 @@ class AndroidProjectIntegrationTest {
         Log.d("\n$classFilesCount signature(s) were added in ${signatureTimeEnd - signatureTimeStart} ms")
 
         // Copy intermediate build directory into final recursively
+        // Slash symbol is important!
         check(
-            exec("cp -r ${Params.BUILD_PATH_INTERMEDIATE} ${Params.BUILD_PATH_FINAL}").successful
+            exec("cp -r ${Params.BUILD_PATH_INTERMEDIATE}/ ${Params.BUILD_PATH_FINAL}/").successful
         ) { "Failed to copy intermediate build directory into final" }
+
+        // Create DEX patch
+        exec("find ${Params.BUILD_PATH_FINAL} -name '*.class'").let { result ->
+            if (result.successful) {
+                val dexingTimeStart = System.currentTimeMillis()
+
+                if (!DexPatchCompiler.run(result.output.toSet())) {
+                    Log.d("")
+                    DexPatchCompiler.output().forEach(Log::d)
+                    error("Failed to create DEX patch")
+                }
+                val dexingTimeEnd = System.currentTimeMillis()
+                Log.d("Creating DEX patch finished in ${dexingTimeEnd - dexingTimeStart} ms")
+            } else {
+                error("Failed to list all .class files in ${Params.BUILD_PATH_FINAL} directory")
+            }
+        }
+
+        // Total time output
+        val totalTimeEnd = System.currentTimeMillis()
+        val dexFile = File("${Params.DEX_FILE_PATH}/${Params.DEX_PATCH_DEFAULT_NAME}")
+        check(dexFile.exists()) { "No DEX file found: ${dexFile.absolutePath}" }
+
+        Log.d("\n### Total time: ${(totalTimeEnd - totalTimeStart) / 1000} sec, size: ${dexFile.length() / 1024} KB ###")
     }
 
     @After
