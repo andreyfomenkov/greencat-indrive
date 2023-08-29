@@ -6,6 +6,7 @@ import org.junit.Before
 import org.junit.Test
 import ru.fomenkov.utils.WorkerTaskExecutor
 import ru.fomenkov.data.Repository
+import ru.fomenkov.parser.AdbDevicesParser
 import ru.fomenkov.parser.BuildGradleParser
 import ru.fomenkov.parser.GitStatusParser
 import ru.fomenkov.parser.SettingsGradleParser
@@ -210,10 +211,37 @@ class AndroidProjectIntegrationTest {
             }
         }
 
+        // Get available Android devices via adb
+        check(File(Params.ADB_TOOL_PATH).exists()) { "ADB not found at: ${Params.ADB_TOOL_PATH}" }
+        exec("export LANG=en_US; ${Params.ADB_TOOL_PATH} devices").let { result ->
+            if (result.successful) {
+                when (AdbDevicesParser(result.output).parse()) {
+                    AdbDevicesParser.Result.SUCCESS -> Log.d("Android device found")
+                    AdbDevicesParser.Result.NO_DEVICES -> {
+                        Log.d("No devices connected")
+                        return@let
+                    }
+                    AdbDevicesParser.Result.MULTIPLE_DEVICES -> {
+                        Log.d("Multiple devices connected")
+                        return@let
+                    }
+                }
+            } else {
+                error("Failed to get Android devices via adb")
+            }
+        }
+
+        // Push DEX patch
+        exec("${Params.ADB_TOOL_PATH} push ${Params.DEX_PATCH_SOURCE_PATH} ${Params.DEX_PATCH_DEST_PATH}").let { result ->
+            if (!result.successful) {
+                error("Failed to push DEX patch to Android device")
+            }
+        }
+
         // Total time output
         val totalTimeEnd = System.currentTimeMillis()
-        val dexFile = File("${Params.DEX_FILE_PATH}/${Params.DEX_PATCH_DEFAULT_NAME}")
-        check(dexFile.exists()) { "No DEX file found: ${dexFile.absolutePath}" }
+        val dexFile = File(Params.DEX_PATCH_SOURCE_PATH)
+        check(dexFile.exists()) { "No DEX file found: ${dexFile.absolutePath} ${Params.DEX_PATCH_DEST_PATH}" }
 
         Log.d("\n### Total time: ${(totalTimeEnd - totalTimeStart) / 1000} sec, size: ${dexFile.length() / 1024} KB ###")
     }
