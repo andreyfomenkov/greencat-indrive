@@ -26,6 +26,7 @@ import java.util.concurrent.Callable
 /**
  * [1] Setup Android project root as a working directory for Run/Debug configuration
  * [2] Modify files in project to get not empty `git status` command output (optional)
+ * [3] Add PACKAGE_NAME and COMPONENT_NAME for Run/Debug configuration
  */
 class AndroidProjectIntegrationTest {
 
@@ -46,10 +47,16 @@ class AndroidProjectIntegrationTest {
     @Test
     fun `Test plugin workflow`() {
         val totalTimeStart = System.currentTimeMillis()
+        val packageName = System.getenv()["PACKAGE_NAME"] ?: ""
+        val componentName = System.getenv()["COMPONENT_NAME"] ?: ""
 
         // Check working directory
         Log.d("Current working directory: ${File("").absolutePath}")
         assertTrue("No settings.gradle file found. Incorrect working directory?", File(Settings.SETTINGS_GRADLE_FILE_NAME).exists())
+
+        // Check application package and component name
+        assert(packageName.isNotBlank()) { "No package name provided. Add PACKAGE_NAME env variable to run configuration" }
+        assert(componentName.isNotBlank()) { "No component name provided. Add COMPONENT_NAME env variable to run configuration" }
 
         // Check shell commands
         ShellCommandsValidator.validate()
@@ -231,12 +238,33 @@ class AndroidProjectIntegrationTest {
             }
         }
 
+        // Stop current process
+        exec("${Params.ADB_TOOL_PATH} shell am force-stop $packageName").let { result ->
+            if (result.successful) {
+                Log.d("Force stop application: $packageName")
+            } else {
+                error("Failed to stop process")
+            }
+        }
+
         // Push DEX patch
         exec("${Params.ADB_TOOL_PATH} push ${Params.DEX_PATCH_SOURCE_PATH} ${Params.DEX_PATCH_DEST_PATH}").let { result ->
-            if (!result.successful) {
+            if (result.successful) {
+                Log.d("DEX patch successfully pushed to Android device")
+            } else {
                 error("Failed to push DEX patch to Android device")
             }
         }
+
+        // Restart application
+        exec("${Params.ADB_TOOL_PATH} shell am start -n $packageName/$componentName -a android.intent.action.MAIN -c android.intent.category.LAUNCHER")
+            .let { result ->
+                if (result.successful) {
+                    Log.d("Starting $componentName")
+                } else {
+                    error("Failed to start Activity: $componentName")
+                }
+            }
 
         // Total time output
         val totalTimeEnd = System.currentTimeMillis()
