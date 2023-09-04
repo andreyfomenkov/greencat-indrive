@@ -24,7 +24,8 @@ object CompilationStrategySelector {
         }
         val strategy = when {
             daggerGraphSources.isNotEmpty() -> {
-                KaptCompilationStrategy()
+                // KaptCompilationStrategy() TODO: uncomment for kapt implementation
+                PlainCompilationStrategy()
             }
             plainSources.isNotEmpty() -> {
                 PlainCompilationStrategy()

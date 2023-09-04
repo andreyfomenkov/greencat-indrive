@@ -24,7 +24,6 @@ class CompilationRoundsBuilder(private val sources: Set<String>) {
             val children = Repository.Graph.getChildModules(module)
 
             checkNotNull(children) { "No module in graph: $module" }
-            Log.v("[${module.name}] $sourcePath")
             allModules += module
 
             if (!sourcesMap.containsKey(module)) {

@@ -12,6 +12,7 @@ import ru.fomenkov.parser.GitStatusParser
 import ru.fomenkov.parser.SettingsGradleParser
 import ru.fomenkov.plugin.ClassFileSignatureSupplier
 import ru.fomenkov.plugin.CompilationRoundsBuilder
+import ru.fomenkov.plugin.IncrementalRunDiffer
 import ru.fomenkov.plugin.compiler.DexPatchCompiler
 import ru.fomenkov.plugin.compiler.Params
 import ru.fomenkov.plugin.strategy.CompilationStrategySelector
@@ -61,8 +62,11 @@ class AndroidProjectIntegrationTest {
         // Check shell commands
         ShellCommandsValidator.validate()
 
-        // Remove intermediate build directory
-        exec("rm -rf ${Params.BUILD_PATH_INTERMEDIATE}")
+        // Cleanup intermediate build directory
+        exec("rm -rf ${Params.BUILD_PATH_INTERMEDIATE}; mkdir -p ${Params.BUILD_PATH_INTERMEDIATE}")
+
+        // Create final build directory
+        exec("mkdir -p ${Params.BUILD_PATH_FINAL}")
 
         // Parse settings.gradle file
         val modules = timeMsec("Parsing settings.gradle") {
@@ -131,13 +135,14 @@ class AndroidProjectIntegrationTest {
         }
 
         // Get project dirty files (see step [2] above)
-        val (diff) = exec("export LANG=en_US; git status")
-        val diffOutput = GitStatusParser(diff).parse()
-        Log.d("Current branch name: ${diffOutput.branch}")
+        val (gitDiffOutput) = exec("export LANG=en_US; git status")
+        val dirtySourcesResult = GitStatusParser(gitDiffOutput).parse()
+        Log.d("Current branch name: ${dirtySourcesResult.branch}\n")
 
         // Split supported and not supported source files
-        val (supportedSourceFiles, unknownSourceFiles) = diffOutput.files.partition(Utils::isSourceFileSupported)
+        val (supportedSourceFiles, unknownSourceFiles) = dirtySourcesResult.files.partition(Utils::isSourceFileSupported)
 
+        // Show details in case no supported source files found
         if (supportedSourceFiles.isEmpty() && unknownSourceFiles.isEmpty()) {
             Log.d("\nNothing to compile. Please modify supported files to proceed")
             return
@@ -148,8 +153,34 @@ class AndroidProjectIntegrationTest {
             return
         }
 
+        // Analyze incremental diff
+        val (compileSourcePaths, removeSourcePaths) = IncrementalRunDiffer(
+            executor = executor,
+            intermediateBuildPath = Params.BUILD_PATH_INTERMEDIATE,
+            finalBuildPath = Params.BUILD_PATH_FINAL,
+        ).run(supportedSourceFiles.toSet())
+
+        // Display details for the current incremental diff step
+        Log.d("# Incremental diff details #")
+        if (compileSourcePaths.isEmpty()) {
+            Log.d("[COMPILE] * nothing *")
+        } else {
+            compileSourcePaths.forEach { path -> Log.d("[COMPILE] $path") }
+        }
+        if (removeSourcePaths.isEmpty()) {
+            Log.d("[REMOVE] * nothing *")
+        } else {
+            removeSourcePaths.forEach { path -> Log.d("[REMOVE]  $path") }
+        }
+
+        // Check for any sources for incremental compilation
+        if (compileSourcePaths.isEmpty()) {
+            Log.d("\nNothing to compile since the previous incremental run")
+            return
+        }
+
         // Compose compilation rounds
-        val rounds = CompilationRoundsBuilder(supportedSourceFiles.toSet()).build()
+        val rounds = CompilationRoundsBuilder(compileSourcePaths.toSet()).build()
 
         rounds.forEachIndexed { index, round ->
             Log.d("\nRound ${index + 1}:")
@@ -195,11 +226,14 @@ class AndroidProjectIntegrationTest {
         val signatureTimeEnd = System.currentTimeMillis()
         Log.d("\n$classFilesCount signature(s) were added in ${signatureTimeEnd - signatureTimeStart} ms")
 
-        // Copy intermediate build directory into final recursively
+        // Recursively copy intermediate .class files to the final build directory
         // Slash symbol is important!
         check(
             exec("cp -r ${Params.BUILD_PATH_INTERMEDIATE}/ ${Params.BUILD_PATH_FINAL}/").successful
         ) { "Failed to copy intermediate build directory into final" }
+
+        // Check .class files to remove from the final build directory
+        // TODO: implement
 
         // Create DEX patch
         exec("find ${Params.BUILD_PATH_FINAL} -name '*.class'").let { result ->

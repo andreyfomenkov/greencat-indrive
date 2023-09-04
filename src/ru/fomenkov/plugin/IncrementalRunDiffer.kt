@@ -31,7 +31,7 @@ class IncrementalRunDiffer(
         val currHashTable = computeHashes(gitDiffPaths)
         val calcEndTime = System.currentTimeMillis()
 
-        Log.v("# Hash tables comparison (calc time = ${calcEndTime - calcStartTime} ms)#")
+        Log.v("# Hash tables comparison (calc time = ${calcEndTime - calcStartTime} ms) #")
 
         (prevHashTable.keys + currHashTable.keys).forEach { path ->
             val prevHashValue = prevHashTable[path]
