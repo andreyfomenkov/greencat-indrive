@@ -20,6 +20,6 @@ object Params {
     val BUILD_TOOLS_PATH = "$ANDROID_SDK_ROOT_PATH/build-tools"
     val ADB_TOOL_PATH = "$ANDROID_SDK_ROOT_PATH/platform-tools/adb"
 
-    // Android device DEX patch path
-    const val DEX_PATCH_DEST_PATH = "/data/local/tmp/patch.dex"
+    // Android device DEX patch path prefix
+    const val DEX_PATCH_DEST_PATH_PREFIX = "/data/local/tmp/patch-"
 }

@@ -6,12 +6,10 @@ import org.junit.Before
 import org.junit.Test
 import ru.fomenkov.utils.WorkerTaskExecutor
 import ru.fomenkov.data.Repository
-import ru.fomenkov.parser.AdbDevicesParser
-import ru.fomenkov.parser.BuildGradleParser
-import ru.fomenkov.parser.GitStatusParser
-import ru.fomenkov.parser.SettingsGradleParser
+import ru.fomenkov.parser.*
 import ru.fomenkov.plugin.ClassFileSignatureSupplier
 import ru.fomenkov.plugin.CompilationRoundsBuilder
+import ru.fomenkov.plugin.FinalBuildDirectoryCleaner
 import ru.fomenkov.plugin.IncrementalRunDiffer
 import ru.fomenkov.plugin.compiler.DexPatchCompiler
 import ru.fomenkov.plugin.compiler.Params
@@ -39,6 +37,7 @@ class AndroidProjectIntegrationTest {
         Settings.displayModuleDependencies = false
         Settings.displayResolvingChildModules = false
         Settings.displayKotlinCompilerModuleNames = false
+        Settings.useIncrementalDiff = true
         Repository.Modules.clear()
         Repository.Graph.clear()
         Repository.CompilerModuleNameParam.clear()
@@ -153,12 +152,24 @@ class AndroidProjectIntegrationTest {
             return
         }
 
+        // TODO: push existing DEX patch or just launch app in case nothing to compile (check for removed!)
+
         // Analyze incremental diff
         val (compileSourcePaths, removeSourcePaths) = IncrementalRunDiffer(
             executor = executor,
             intermediateBuildPath = Params.BUILD_PATH_INTERMEDIATE,
             finalBuildPath = Params.BUILD_PATH_FINAL,
-        ).run(supportedSourceFiles.toSet())
+        )
+            .run(supportedSourceFiles.toSet())
+            .let { (compileSourcePaths, removeSourcePaths) ->
+                if (Settings.useIncrementalDiff) {
+                    Log.d("Incremental diff is enabled\n")
+                    compileSourcePaths to removeSourcePaths
+                } else {
+                    Log.d("Incremental diff is disabled\n")
+                    supportedSourceFiles to removeSourcePaths
+                }
+            }
 
         // Display details for the current incremental diff step
         Log.d("# Incremental diff details #")
@@ -233,14 +244,27 @@ class AndroidProjectIntegrationTest {
         ) { "Failed to copy intermediate build directory into final" }
 
         // Check .class files to remove from the final build directory
-        // TODO: implement
+        FinalBuildDirectoryCleaner(finalBuildPath = Params.BUILD_PATH_FINAL)
+            .clean(removeSourcePaths)
+            .let { paths ->
+                if (paths.isNotEmpty()) {
+                    Log.d("\n# Class files removed from ${Params.BUILD_PATH_FINAL} #")
+                    paths.forEach(Log::d)
+                    Log.d("")
+                }
+            }
 
         // Create DEX patch
         exec("find ${Params.BUILD_PATH_FINAL} -name '*.class'").let { result ->
             if (result.successful) {
+                Log.d("# Class entries included into patch #")
+                val paths = result.output.toSet()
+                // Debug output for all class entries included into patch
+                Utils.composeClassEntries(paths).forEach(Log::d)
+                Log.d("")
                 val dexingTimeStart = System.currentTimeMillis()
 
-                if (!DexPatchCompiler.run(result.output.toSet())) {
+                if (!DexPatchCompiler.run(paths)) {
                     Log.d("")
                     DexPatchCompiler.output().forEach(Log::d)
                     error("Failed to create DEX patch")
@@ -272,21 +296,38 @@ class AndroidProjectIntegrationTest {
             }
         }
 
+        // Get application last modified timestamp
+        val lastUpdateTimestamp = AppLastModifiedTimestampResolver.resolve(packageName)
+        Log.d("Package: $packageName, last updated timestamp: $lastUpdateTimestamp")
+
+        // Compose destination DEX patch path
+        val dstDexPatchPath = "${Params.DEX_PATCH_DEST_PATH_PREFIX}${lastUpdateTimestamp}000.dex"
+        Log.d("Patch output path: $dstDexPatchPath")
+
+        // Clean previous patch files on Android device
+        exec("adb shell rm -f '${Params.DEX_PATCH_DEST_PATH_PREFIX}*.dex'").let { result ->
+            if (!result.successful) {
+                val message = "Failed to clean previous patch files on Android device:\n" +
+                        result.output.joinToString(separator = "\n")
+                error(message)
+            }
+        }
+
+        // Push DEX patch
+        exec("${Params.ADB_TOOL_PATH} push ${Params.DEX_PATCH_SOURCE_PATH} $dstDexPatchPath").let { result ->
+            if (result.successful) {
+                Log.d("DEX patch successfully pushed to Android device")
+            } else {
+                error("Failed to push DEX patch to Android device")
+            }
+        }
+
         // Stop current process
         exec("${Params.ADB_TOOL_PATH} shell am force-stop $packageName").let { result ->
             if (result.successful) {
                 Log.d("Force stop application: $packageName")
             } else {
                 error("Failed to stop process")
-            }
-        }
-
-        // Push DEX patch
-        exec("${Params.ADB_TOOL_PATH} push ${Params.DEX_PATCH_SOURCE_PATH} ${Params.DEX_PATCH_DEST_PATH}").let { result ->
-            if (result.successful) {
-                Log.d("DEX patch successfully pushed to Android device")
-            } else {
-                error("Failed to push DEX patch to Android device")
             }
         }
 
@@ -303,8 +344,7 @@ class AndroidProjectIntegrationTest {
         // Total time output
         val totalTimeEnd = System.currentTimeMillis()
         val dexFile = File(Params.DEX_PATCH_SOURCE_PATH)
-        check(dexFile.exists()) { "No DEX file found: ${dexFile.absolutePath} ${Params.DEX_PATCH_DEST_PATH}" }
-
+        check(dexFile.exists()) { "No DEX file found: ${Params.DEX_PATCH_SOURCE_PATH}" }
         Log.d("\n### Total time: ${(totalTimeEnd - totalTimeStart) / 1000} sec, size: ${dexFile.length() / 1024} KB ###")
     }
 

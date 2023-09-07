@@ -8,6 +8,7 @@ object Settings {
     var displayModuleDependencies = false
     var displayResolvingChildModules = false
     var displayKotlinCompilerModuleNames = false
+    var useIncrementalDiff = true
 
     val currentDir: String = File("").absolutePath
     const val SETTINGS_GRADLE_FILE_NAME = "settings.gradle"

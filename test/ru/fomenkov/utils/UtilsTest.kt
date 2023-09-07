@@ -31,4 +31,33 @@ class UtilsTest {
         assertFalse(Utils.isSourceFileSupported("project/FooBar.xml"))
         assertFalse(Utils.isSourceFileSupported(" project/FooBar.xml  "))
     }
+
+    @Test
+    fun `Test compose class entries`() {
+        val paths = setOf(
+            "build/final/ru/fomenkov/ClassA.class",
+            "build/final/ru/fomenkov/ClassA\$foo.class",
+            "build/final/ru/fomenkov/ClassA\$foo\$bar.class",
+
+            "build/final/ru/fomenkov/ClassB.class",
+            "build/final/ru/fomenkov/ClassB\$foo.class",
+            "build/final/ru/fomenkov/ClassC\$foo\$bar.class",
+
+            "build/final/ru/fomenkov/ClassD\$foo.class",
+            "build/final/ru/fomenkov/ClassE\$foo\$bar.class",
+
+            "build/final/ru/fomenkov/ClassF.class",
+        )
+        assertEquals(
+            setOf(
+                "build/final/ru/fomenkov/ClassA",
+                "build/final/ru/fomenkov/ClassB",
+                "build/final/ru/fomenkov/ClassC",
+                "build/final/ru/fomenkov/ClassD",
+                "build/final/ru/fomenkov/ClassE",
+                "build/final/ru/fomenkov/ClassF",
+            ),
+            Utils.composeClassEntries(paths),
+        )
+    }
 }

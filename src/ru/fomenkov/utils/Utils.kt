@@ -25,4 +25,16 @@ object Utils {
         }
         return false
     }
+
+    fun composeClassEntries(paths: Set<String>) =
+        paths.map { path ->
+            val index = if (path.contains('$')) {
+                path.indexOf('$')
+            } else {
+                path.indexOf(".class")
+            }
+            check(index != -1) { "Failed to parse class file path: $path" }
+            path.substring(0, index)
+        }
+            .toSet()
 }

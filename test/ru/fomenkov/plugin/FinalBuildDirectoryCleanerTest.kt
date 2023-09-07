@@ -29,17 +29,17 @@ class FinalBuildDirectoryCleanerTest {
     @Test
     fun `Test final directory cleanup`() {
         setOf(
-            "ru/fomenkov/ClassA.class",
-            "ru/fomenkov/ClassA\$Companion.class",
-            "ru/fomenkov/ClassA\$onViewCreated\$\$inlined\$observe\$1.class",
+            "build/final/ru/fomenkov/ClassA.class",
+            "build/final/ru/fomenkov/ClassA\$Companion.class",
+            "build/final/ru/fomenkov/ClassA\$onViewCreated\$\$inlined\$observe\$1.class",
 
-            "ru/fomenkov/ClassB.class",
-            "ru/fomenkov/ClassB\$Companion.class",
-            "ru/fomenkov/ClassB\$onViewCreated\$\$inlined\$observe\$1.class",
+            "build/final/ru/fomenkov/ClassB.class",
+            "build/final/ru/fomenkov/ClassB\$Companion.class",
+            "build/final/ru/fomenkov/ClassB\$onViewCreated\$\$inlined\$observe\$1.class",
 
-            "ru/fomenkov/ClassC.class",
-            "ru/fomenkov/ClassC\$Companion.class",
-            "ru/fomenkov/ClassC\$onViewCreated\$\$inlined\$observe\$1.class",
+            "build/final/ru/fomenkov/ClassC.class",
+            "build/final/ru/fomenkov/ClassC\$Companion.class",
+            "build/final/ru/fomenkov/ClassC\$onViewCreated\$\$inlined\$observe\$1.class",
         )
             .forEach { path ->
                 val file = File("$finalBuildDirectory/$path")
@@ -52,18 +52,23 @@ class FinalBuildDirectoryCleanerTest {
             }
 
         FinalBuildDirectoryCleaner(finalBuildDirectory).clean(
-            setOf("ru/fomenkov/ClassA.kt", "ru/fomenkov/ClassC.java")
+            setOf(
+                "build/final/sample/module/a/src/main/java/ru/fomenkov/ClassA.kt",
+                "build/final/sample/module/a/src/debug/kotlin/ru/fomenkov/ClassC.java",
+            )
         )
 
         exec("cd $finalBuildDirectory; find . -name '*.class'").let { result ->
             check(result.successful) { "Failed to execute `find` command" }
             assertEquals(
                 setOf(
-                    "./ru/fomenkov/ClassB.class",
-                    "./ru/fomenkov/ClassB\$Companion.class",
-                    "./ru/fomenkov/ClassB\$onViewCreated\$\$inlined\$observe\$1.class",
+                    "build/final/ru/fomenkov/ClassB.class",
+                    "build/final/ru/fomenkov/ClassB\$Companion.class",
+                    "build/final/ru/fomenkov/ClassB\$onViewCreated\$\$inlined\$observe\$1.class",
                 ),
-                result.output.toSet(),
+                result.output
+                    .map { path -> path.replace("./", "") }
+                    .toSet(),
             )
         }
     }
