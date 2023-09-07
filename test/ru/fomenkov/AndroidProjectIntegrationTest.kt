@@ -33,11 +33,14 @@ class AndroidProjectIntegrationTest {
 
     @Before
     fun setup() {
-        Settings.isVerboseMode = true
-        Settings.displayModuleDependencies = false
-        Settings.displayResolvingChildModules = false
-        Settings.displayKotlinCompilerModuleNames = false
-        Settings.useIncrementalDiff = true
+        with(Settings) {
+            isVerboseMode = true
+            displayModuleDependencies = false
+            displayResolvingChildModules = false
+            displayKotlinCompilerModuleNames = false
+            useIncrementalDiff = true
+            usePlainCompilationStrategyOnly = true
+        }
         Repository.Modules.clear()
         Repository.Graph.clear()
         Repository.CompilerModuleNameParam.clear()

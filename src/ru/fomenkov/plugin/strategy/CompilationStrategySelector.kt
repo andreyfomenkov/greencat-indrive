@@ -1,5 +1,6 @@
 package ru.fomenkov.plugin.strategy
 
+import ru.fomenkov.Settings
 import ru.fomenkov.data.Module
 import ru.fomenkov.data.Round
 import java.io.File
@@ -23,13 +24,9 @@ object CompilationStrategySelector {
             }
         }
         val strategy = when {
-            daggerGraphSources.isNotEmpty() -> {
-                // KaptCompilationStrategy() TODO: uncomment for kapt implementation
-                PlainCompilationStrategy()
-            }
-            plainSources.isNotEmpty() -> {
-                PlainCompilationStrategy()
-            }
+            Settings.usePlainCompilationStrategyOnly -> PlainCompilationStrategy()
+            daggerGraphSources.isNotEmpty() -> KaptCompilationStrategy()
+            plainSources.isNotEmpty() -> PlainCompilationStrategy()
             else -> error("No sources found")
         }
         return strategy
