@@ -71,6 +71,8 @@ class KotlinCompiler(
     private fun composeFriendModulesParam(): String {
         val classpathDirs = classpath.filter { path -> File(path).isDirectory }
         val friendDirs = mutableSetOf<String>()
+        friendDirs += Params.BUILD_PATH_INTERMEDIATE
+        friendDirs += Params.BUILD_PATH_FINAL
 
         round.items.keys.forEach { module ->
             val moduleBuildPath = "/${module.path}/build/"

@@ -4,9 +4,9 @@ import ru.fomenkov.utils.noTilda
 
 object Params {
     // Compiler and plugins
-    private const val KOTLIN_PLUGIN_PATH = "/Applications/Android Studio.app/Contents/plugins/Kotlin"
-    const val KOTLINC = "$KOTLIN_PLUGIN_PATH/kotlinc/bin/kotlinc"
-    const val PARCELIZE_PLUGIN_PATH = "$KOTLIN_PLUGIN_PATH/kotlinc/lib/parcelize-compiler.jar"
+    private val KOTLIN_PLUGIN_PATH = "~/Downloads".noTilda() // TODO: download relaxed compiler
+    val KOTLINC = "$KOTLIN_PLUGIN_PATH/kotlinc/bin/kotlinc"
+    val PARCELIZE_PLUGIN_PATH = "$KOTLIN_PLUGIN_PATH/kotlinc/lib/parcelize-compiler.jar"
 
     // Build directories
     private const val GREENCAT_ROOT_PATH = "greencat"
