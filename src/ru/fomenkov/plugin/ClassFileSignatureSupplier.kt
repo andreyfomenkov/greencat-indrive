@@ -20,7 +20,7 @@ object ClassFileSignatureSupplier {
             val clazz = ClassParser(srcClassFilePath).parse()
             val classGen = ClassGen(clazz)
             val fieldGen = FieldGen(
-                Const.ACC_STATIC.toInt() or Const.ACC_FINAL.toInt(),
+                Const.ACC_PUBLIC.toInt() or Const.ACC_STATIC.toInt() or Const.ACC_FINAL.toInt(),
                 Type.getType(String::class.java),
                 FIELD_NAME,
                 classGen.constantPool,

@@ -102,27 +102,24 @@ class AndroidProjectIntegrationTest {
         val (supportedSourceFiles, unknownSourceFiles) = gitDiffFiles.partition(Utils::isSourceFileSupported)
 
         // Show details in case no supported source files found
+        var isEmptyGitDiff = false
+
         if (supportedSourceFiles.isEmpty() && unknownSourceFiles.isEmpty()) {
             Log.d("\nNothing to compile. Please modify supported files to proceed")
-            return
+            isEmptyGitDiff = true
 
         } else if (supportedSourceFiles.isEmpty()) {
             unknownSourceFiles.forEach { path -> Log.d(" - (NOT SUPPORTED) $path") }
             Log.d("\nNo supported source files to compile. Please modify supported files to proceed")
-            return
+            isEmptyGitDiff = true
         }
 
-        // TODO: push existing DEX patch or just launch app in case nothing to compile (check for removed!)
-        // 1. Empty git diff / no supported files: delete final dir, patch locally and patch on the device, restart app
-        // 2. Empty to compile, empty to remove: push existing patch if any, restart app
-        // 4. Empty to compile, has to remove: clean final dir, create patch, push, restart app
-        // 3. Has to compile: compile, push patch, restart app
-        //
-        // TODO: in case of previous compilation FAILED?
-        // TODO: clear removed classes in final build directory before compilation
-
         // Analyze incremental diff
-        val (compileSourcePaths, removeSourcePaths) = analyzeIncrementalDiff(supportedSourceFiles)
+        val (compileSourcePaths, removeSourcePaths) = if (supportedSourceFiles.isEmpty()) {
+            emptySet<String>() to emptySet()
+        } else {
+            analyzeIncrementalDiff(supportedSourceFiles)
+        }
 
         // Display details for the current incremental diff step
         Log.d("# Incremental diff details #")
@@ -137,14 +134,55 @@ class AndroidProjectIntegrationTest {
             removeSourcePaths.forEach { path -> Log.d("[REMOVE]  $path") }
         }
 
+        // Check single Android device is connected
+        checkAndroidDeviceConnected()
+
+        // Compose destination DEX patch path
+        val dstDexPatchPath = composePatchDestinationPath(packageName)
+
+        // Decide what to do in case nothing to compile
+        when {
+            isEmptyGitDiff -> {
+                Log.d("\n# Git diff is empty #")
+                Log.d(" - clear intermediate build directory")
+                Log.d(" - remove final build directory")
+                Log.d(" - remove patch on Android device")
+                Log.d(" - restart application")
+
+                recreateIntermediateBuildDirectory()
+                removeFinalBuildDirectory()
+                removePatchesOnDevice()
+                restartApp(packageName, componentName)
+                return
+            }
+            compileSourcePaths.isEmpty() && removeSourcePaths.isEmpty() -> {
+                Log.d("\n# Nothing to compile and remove since the previous incremental run #")
+                Log.d(" - push existing patch if any to Android device")
+                Log.d(" - restart application")
+
+                if (File(Params.DEX_PATCH_SOURCE_PATH).exists()) {
+                    pushPatchToDevice(dstDexPatchPath)
+                }
+                restartApp(packageName, componentName)
+                return
+            }
+            compileSourcePaths.isEmpty() -> {
+                Log.d("\n# Nothing to compile, but some sources are removed #")
+                Log.d(" - clear final build directory from removed classes")
+                Log.d(" - recompile DEX patch")
+                Log.d(" - push patch to Android device")
+                Log.d(" - restart application")
+
+                cleanupFinalBuildDirectory(removeSourcePaths)
+                buildDexPatch()
+                pushPatchToDevice(dstDexPatchPath)
+                restartApp(packageName, componentName)
+                return
+            }
+        }
+
         // Cleanup unnecessary .class files in the final build directory
         cleanupFinalBuildDirectory(removeSourcePaths)
-
-        // Check for any sources for incremental compilation
-        if (compileSourcePaths.isEmpty()) {
-            Log.d("\nNothing to compile since the previous incremental run")
-            return
-        }
 
         // Compose compilation rounds
         val rounds = composeCompilationRounds(compileSourcePaths)
@@ -152,8 +190,14 @@ class AndroidProjectIntegrationTest {
         // Perform compilation for all rounds
         compileRounds(rounds).let { result ->
             if (result is CompilationStrategy.Result.Failed) {
-                Log.d("\n### Compilation failed ###\n")
+                Log.d("\n# Compilation failed #")
+                Log.d(" - clear intermediate build directory")
+                Log.d(" - remove final build directory")
+                Log.d("")
+
                 result.output.forEach(Log::d)
+                recreateIntermediateBuildDirectory()
+                removeFinalBuildDirectory()
                 return
             }
         }
@@ -167,11 +211,8 @@ class AndroidProjectIntegrationTest {
         // Build DEX patch
         buildDexPatch()
 
-        // Get available Android devices via adb
+        // Check single Android device is connected
         checkAndroidDeviceConnected()
-
-        // Compose destination DEX patch path
-        val dstDexPatchPath = composePatchDestinationPath(packageName)
 
         // Remove previous patch files on Android device
         removePatchesOnDevice()
@@ -201,6 +242,10 @@ class AndroidProjectIntegrationTest {
 
     private fun recreateIntermediateBuildDirectory() {
         exec("rm -rf ${Params.BUILD_PATH_INTERMEDIATE}; mkdir -p ${Params.BUILD_PATH_INTERMEDIATE}")
+    }
+
+    private fun removeFinalBuildDirectory() {
+        exec("rm -rf ${Params.BUILD_PATH_FINAL}")
     }
 
     private fun createFinalBuildDirectory() {
@@ -297,6 +342,7 @@ class AndroidProjectIntegrationTest {
             }
 
     private fun composeCompilationRounds(compileSourcePaths: Collection<String>): List<Round> {
+        check(compileSourcePaths.isNotEmpty()) { "No source paths to compile" }
         val rounds = CompilationRoundsBuilder(compileSourcePaths.toSet()).build()
 
         rounds.forEachIndexed { index, round ->
