@@ -42,8 +42,8 @@ class AndroidProjectIntegrationTest {
             displayModuleDependencies = false
             displayResolvingChildModules = false
             displayKotlinCompilerModuleNames = false
-            useIncrementalDiff = true
-            usePlainCompilationStrategyOnly = true
+            useIncrementalDiff = false
+            usePlainCompilationStrategyOnly = false
         }
         Repository.Modules.clear()
         Repository.Graph.clear()
@@ -190,6 +190,22 @@ class AndroidProjectIntegrationTest {
         // Perform compilation for all rounds
         compileRounds(rounds).let { result ->
             if (result is CompilationStrategy.Result.Failed) {
+
+                Log.d("\n============= BUILD FAILED =============\n")
+                result.output.forEach(Log::d)
+
+                // TODO: for debugging, remove!!!
+                Log.d("\n============= BUILD DIR =============\n")
+                exec("find ${Params.BUILD_PATH_INTERMEDIATE}")
+                    .output
+                    .filter { path -> path.endsWith(".class") || path.endsWith(".java") || path.endsWith(".kt") }
+                    .forEach { path ->
+                        val sizeKb = File(path).length() / 1024
+                        Log.v("$path ($sizeKb KB)")
+                    }
+                Log.d("\n=====================================")
+                // TODO: for debugging, remove!!!
+
                 Log.d("\n# Compilation failed #")
                 Log.d(" - clear intermediate build directory")
                 Log.d(" - remove final build directory")

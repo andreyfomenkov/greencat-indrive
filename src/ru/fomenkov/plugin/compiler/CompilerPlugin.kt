@@ -7,5 +7,5 @@ package ru.fomenkov.plugin.compiler
 data class CompilerPlugin(
     val path: String,
     val id: String = "",
-    val options: Map<String, String> = emptyMap(),
+    val options: List<Pair<String, String>> = emptyList(),
 )

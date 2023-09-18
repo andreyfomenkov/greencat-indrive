@@ -7,6 +7,11 @@ object Params {
     private val KOTLIN_PLUGIN_PATH = "~/Downloads".noTilda() // TODO: download relaxed compiler
     val KOTLINC = "$KOTLIN_PLUGIN_PATH/kotlinc/bin/kotlinc"
     val PARCELIZE_PLUGIN_PATH = "$KOTLIN_PLUGIN_PATH/kotlinc/lib/parcelize-compiler.jar"
+    val KAPT_PLUGIN_PATH = "$KOTLIN_PLUGIN_PATH/kotlinc/lib/kotlin-annotation-processing.jar"
+    const val KAPT_CLASSES_DIR = "incrementalData"
+    const val KAPT_SOURCES_DIR = "incrementalData"
+    const val KAPT_INCREMENTAL_DATA_DIR = "incrementalData"
+    const val KAPT_STUBS_DIR = "stubs"
 
     // Build directories
     private const val GREENCAT_ROOT_PATH = "greencat"

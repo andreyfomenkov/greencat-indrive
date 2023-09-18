@@ -1,5 +1,6 @@
 package ru.fomenkov.plugin.compiler
 
+import ru.fomenkov.Settings
 import ru.fomenkov.data.Round
 import ru.fomenkov.shell.CommandBuilder
 import ru.fomenkov.shell.Shell.exec
@@ -62,7 +63,7 @@ class KotlinCompiler(
             .param("-d", outputDir)
             .param(sources.joinToString(separator = " "))
             .build()
-        val result = exec(cmd)
+        val result = exec("export JAVA_OPTS=-Xmx${Settings.JAVA_OPTS_XMX}; $cmd")
         val endTime = System.currentTimeMillis()
         Log.v("Complete task `$moduleNameParam` in ${(endTime - startTime) / 1000} sec")
         result
