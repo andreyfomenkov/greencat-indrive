@@ -1,0 +1,11 @@
+[abc]
+
+detekt = "1.22.0"
+# Some comment
+# lib = "version"
+firebase = "2.9.7"
+
+[123]
+android-gradle-plugin = { module = "com.android.tools.build:gradle", version.ref = "agp" }
+kotlin-gradle-plugin = { module = "org.jetbrains.kotlin:kotlin-gradle-plugin", version.ref = "kotlin" }
+# foo = "bar"

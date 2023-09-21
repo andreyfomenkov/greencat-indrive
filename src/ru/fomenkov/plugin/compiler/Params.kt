@@ -3,6 +3,13 @@ package ru.fomenkov.plugin.compiler
 import ru.fomenkov.utils.noTilda
 
 object Params {
+    const val LIBRARY_VERSIONS_FILE_PATH = "gradle/libs.versions.toml"
+
+    // Gradle caches
+    val ROOT_GRADLE_CACHE_PATH = "~/.gradle/caches".noTilda()
+    val GRADLE_CACHE_MODULES_PATH = "$ROOT_GRADLE_CACHE_PATH/modules-2"
+    val GRADLE_CACHE_TRANSFORMS_PATH = "$ROOT_GRADLE_CACHE_PATH/transforms-3"
+
     // Compiler and plugins
     private val KOTLIN_PLUGIN_PATH = "~/Downloads".noTilda() // TODO: download relaxed compiler
     val KOTLINC = "$KOTLIN_PLUGIN_PATH/kotlinc/bin/kotlinc"

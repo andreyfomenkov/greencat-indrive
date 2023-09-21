@@ -8,6 +8,23 @@ import java.io.File
 
 object Repository {
 
+    object LibraryVersions {
+        private val versionsMap = mutableMapOf<String, String>() // Library name -> version
+
+        fun setup(versions: Map<String, String>) {
+            check(versionsMap.isEmpty()) { "Library versions already initialized" }
+
+            Log.v("Added ${versions.size} library version(s)")
+            versionsMap += versions
+        }
+
+        fun get(libraryName: String) = versionsMap[libraryName]
+
+        fun clear() {
+            versionsMap.clear()
+        }
+    }
+
     object Modules {
         private val modulesMap = mutableMapOf<String, Module>() // Module name -> module
 

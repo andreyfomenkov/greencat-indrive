@@ -48,6 +48,7 @@ class AndroidProjectIntegrationTest {
         Repository.Modules.clear()
         Repository.Graph.clear()
         Repository.CompilerModuleNameParam.clear()
+        Repository.LibraryVersions.clear()
         executor = WorkerTaskExecutor()
     }
 
@@ -71,6 +72,10 @@ class AndroidProjectIntegrationTest {
 
         // Create final build directory if it doesn't exist
         createFinalBuildDirectory()
+
+        // Parse library versions
+        val libraryVersions = LibVersionsParser(Params.LIBRARY_VERSIONS_FILE_PATH).parse()
+        Repository.LibraryVersions.setup(libraryVersions)
 
         // Parse settings.gradle file
         val modules = parseSettingsGradleFile()
