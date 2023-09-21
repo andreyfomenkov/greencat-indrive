@@ -3,11 +3,14 @@ package ru.fomenkov.plugin
 import ru.fomenkov.data.Module
 import java.io.File
 
-class DaggerFactoryClassPathsResolver(
+class DaggerGeneratedClassesResolver(
     private val module: Module,
     private val sources: Set<String>,
     private val projectClasspath: Set<String>,
 ) {
+
+    private val factoryClassSuffix = "_Factory.class"
+    private val membersInjectorClassSuffix = "_MembersInjector.class"
 
     fun resolve(): Set<String> {
         val paths = mutableSetOf<String>()
@@ -31,16 +34,21 @@ class DaggerFactoryClassPathsResolver(
             val dotIndex = kotlinFileName.lastIndexOf('.')
             check(dotIndex != -1) { "Failed to parse source file name: $kotlinFileName" }
 
-            val factoryClassName = kotlinFileName.substring(0, dotIndex) + "_Factory.class"
-            val factoryClassPath = (packageParts + factoryClassName).joinToString(separator = "/")
+            val factoryClassName = kotlinFileName.substring(0, dotIndex) + factoryClassSuffix
+            val membersInjectorClassName = kotlinFileName.substring(0, dotIndex) + membersInjectorClassSuffix
+            val generatedClassPath = packageParts.joinToString(separator = "/")
 
             projectClasspath
                 .filter { it.contains(module.path) }
                 .forEach { path ->
-                    val file = File("$path/$factoryClassPath")
+                    val factoryClassFile = File("$path/$generatedClassPath/$factoryClassName")
+                    val membersInjectorClassFile = File("$path/$generatedClassPath/$membersInjectorClassName")
 
-                    if (file.exists()) {
-                        paths += file.absolutePath
+                    if (factoryClassFile.exists()) {
+                        paths += factoryClassFile.absolutePath
+                    }
+                    if (membersInjectorClassFile.exists()) {
+                        paths += membersInjectorClassFile.absolutePath
                     }
                 }
         }

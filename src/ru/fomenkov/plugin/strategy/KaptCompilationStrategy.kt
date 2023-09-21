@@ -1,13 +1,16 @@
 package ru.fomenkov.plugin.strategy
 
 import ru.fomenkov.data.Round
-import ru.fomenkov.plugin.DaggerFactoryClassPathsResolver
+import ru.fomenkov.plugin.DaggerGeneratedClassesResolver
 import ru.fomenkov.plugin.compiler.CompilerPlugin
+import ru.fomenkov.plugin.compiler.JavaCompiler
 import ru.fomenkov.plugin.compiler.KotlinCompiler
 import ru.fomenkov.plugin.compiler.Params
 import ru.fomenkov.shell.Shell.exec
 import ru.fomenkov.utils.Log
+import ru.fomenkov.utils.WorkerTaskExecutor
 import java.io.File
+import java.util.concurrent.Callable
 
 class KaptCompilationStrategy : CompilationStrategy {
 
@@ -28,14 +31,18 @@ class KaptCompilationStrategy : CompilationStrategy {
 //            "/Users/andreyfomenkov/.gradle/caches/transforms-3/e15525eafe3c27b914cd3b037b3543ac/transformed/jetified-kotlinx-metadata-jvm-0.5.0.jar",
         ) + getProjectClasspath()
 
-        // Dagger won't generate factory classes once it has been found in project classpath
-        // Rename all *_Factory.class files to *_Factory.class_TEMP related to Dagger
-        val tempSourcePaths = round.items.flatMap { (module, paths) ->
-            DaggerFactoryClassPathsResolver(module, paths, classpath).resolve()
-        }.toSet()
-        renameFactoryClasses(tempSourcePaths, toTemp = true)
+        // Dagger won't generate factory and members injector classes once it has been found in project classpath
+        // Add to Dagger related *_Factory.class and *_MembersInjector.class files temporary suffix
+        val daggerClassesToRename = round.items
+            .flatMap { (module, paths) ->
+                DaggerGeneratedClassesResolver(module, paths, classpath).resolve()
+            }
+            .toSet() + listDaggerClassFilesToRename()
 
-        // Build stubs and run annotation processing (kapt only)
+        daggerClassesToRename.forEach { path -> Log.v("[RENAME] $path") }
+        renameFactoryClasses(daggerClassesToRename, toTemp = true)
+
+        // Create compiler for Dagger KAPT and generating stubs
         val kaptCompiler = KotlinCompiler(
             round = round,
             compilerPath = Params.KOTLINC,
@@ -56,14 +63,29 @@ class KaptCompilationStrategy : CompilationStrategy {
             return CompilationStrategy.Result.Failed(kaptCompiler.output())
 
         } finally {
-            // Rename *_Factory.class_TEMP files back to *_Factory.class
-            renameFactoryClasses(tempSourcePaths, toTemp = false)
+            // Rename *_Factory.class_TEMP and *_MembersInjector.class_TEMP files back
+            renameFactoryClasses(daggerClassesToRename, toTemp = false)
         }
 
         // Remove generated NonExistentClass.java class
         removeNonExistentGeneratedJavaFile()
 
-        // Run javac for KAPT generated Java classes and kotlinc for Kotlin files
+        // Find all Dagger generated *.java classes to compile
+        val javaSources = listDaggerJavaClassesToCompile()
+
+        // List generated *.java files to compile
+        javaSources.forEach { path -> Log.v("Java class found: $path") }
+
+        // Create compiler for KAPT generated Java classes
+        val javaCompiler = JavaCompiler(
+            sources = javaSources,
+            classpath = classpath,
+            outputDir = Params.BUILD_PATH_INTERMEDIATE,
+        )
+
+        // TODO: find Component classes in module
+
+        // Create compiler for Kotlin files
         val kotlinCompiler = KotlinCompiler(
             round = round, // TODO: find and add Component classes from modules declared in the current round
             compilerPath = Params.KOTLINC,
@@ -73,19 +95,70 @@ class KaptCompilationStrategy : CompilationStrategy {
             classpath = classpath,
             outputDir = Params.BUILD_PATH_INTERMEDIATE,
         )
-        if (kotlinCompiler.run()) {
-            Log.v("Kotlinc successful")
-        } else {
-            Log.v("Failed to run kotlinc")
-            kotlinCompiler.output().forEach(Log::v)
-            return CompilationStrategy.Result.Failed(kotlinCompiler.output())
+
+        // Create worker tasks
+        val compilerTasks = listOf(
+            Callable {
+                javaCompiler.run().also { result -> Log.v("Running javac ${if (result) "OK" else "FAILED"}") }
+            },
+            Callable {
+                kotlinCompiler.run().also { result -> Log.v("Running kotlinc ${if (result) "OK" else "FAILED"}") }
+            }
+        )
+
+        // Run kotlinc and javac concurrently
+        val executor = WorkerTaskExecutor()
+        val results = try {
+            executor.run(compilerTasks)
+
+        } catch (error: Throwable) {
+            Log.v("Failed to run javac or/and kotlinc: ${error.message}")
+            val javacOutput = javaCompiler.output()
+            val kotlincOutput = kotlinCompiler.output()
+            return CompilationStrategy.Result.Failed(javacOutput + kotlincOutput)
+
+        } finally {
+            executor.release()
         }
 
-        // Remove Dagger related KAPT directories to exclude *.class files from the result DEX patch
+        // Remove Dagger related KAPT directories to exclude *.class files from the resulting DEX patch
         removeDaggerKaptDirectories()
 
-        return CompilationStrategy.Result.Failed(kaptCompiler.output()) // TODO: + Result.OK
+        return if (results.contains(false)) {
+            CompilationStrategy.Result.Failed(javaCompiler.output() + kotlinCompiler.output())
+        } else {
+            CompilationStrategy.Result.OK
+        }
     }
+
+    private fun listDaggerClassFilesToRename() = listOf(
+        "*_Factory.class",
+        "*_MembersInjector.class",
+    )
+        .flatMap { fileMask ->
+            exec("find ${Params.BUILD_PATH_FINAL} -name '$fileMask'").let { result ->
+                if (result.successful) {
+                    result.output
+                } else {
+                    error("Failed to list Dagger *.java files for mask: $fileMask")
+                }
+            }
+        }.toSet()
+
+    private fun listDaggerJavaClassesToCompile() = listOf(
+        "*_Factory.java",
+        "*_MembersInjector.java",
+        "Dagger*.java", // Component Java classes
+    )
+        .flatMap { fileMask ->
+            exec("find ${Params.BUILD_PATH_INTERMEDIATE} -name '$fileMask'").let { result ->
+                if (result.successful) {
+                    result.output
+                } else {
+                    error("Failed to list Dagger *.java files for mask: $fileMask")
+                }
+            }
+        }.toSet()
 
     private fun renameFactoryClasses(paths: Set<String>, toTemp: Boolean) {
         paths.forEach { path ->
