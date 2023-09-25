@@ -10,7 +10,7 @@ import ru.fomenkov.utils.WorkerTaskExecutor
 import ru.fomenkov.data.Repository
 import ru.fomenkov.data.Round
 import ru.fomenkov.parser.*
-import ru.fomenkov.plugin.ClassFileSignatureSupplier
+import ru.fomenkov.plugin.bytecode.ClassFileSignatureSupplier
 import ru.fomenkov.plugin.CompilationRoundsBuilder
 import ru.fomenkov.plugin.FinalBuildDirectoryCleaner
 import ru.fomenkov.plugin.IncrementalRunDiffer

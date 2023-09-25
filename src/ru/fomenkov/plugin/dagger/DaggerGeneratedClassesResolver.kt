@@ -1,4 +1,4 @@
-package ru.fomenkov.plugin
+package ru.fomenkov.plugin.dagger
 
 import ru.fomenkov.data.Module
 import java.io.File

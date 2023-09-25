@@ -1,4 +1,4 @@
-package ru.fomenkov.plugin
+package ru.fomenkov.plugin.dagger
 
 import ru.fomenkov.shell.Shell.exec
 import ru.fomenkov.utils.WorkerTaskExecutor

@@ -4,8 +4,8 @@ import ru.fomenkov.data.Module
 import ru.fomenkov.data.Repository
 import ru.fomenkov.data.Round
 import ru.fomenkov.parser.MetadataDescriptorParser
-import ru.fomenkov.plugin.DaggerComponentsResolver
-import ru.fomenkov.plugin.DaggerGeneratedClassesResolver
+import ru.fomenkov.plugin.dagger.DaggerComponentsResolver
+import ru.fomenkov.plugin.dagger.DaggerGeneratedClassesResolver
 import ru.fomenkov.plugin.LibDependenciesResolver
 import ru.fomenkov.plugin.compiler.CompilerPlugin
 import ru.fomenkov.plugin.compiler.JavaCompiler

@@ -1,4 +1,4 @@
-package ru.fomenkov.plugin
+package ru.fomenkov.plugin.bytecode
 
 import org.apache.bcel.Const
 import org.apache.bcel.classfile.ClassParser

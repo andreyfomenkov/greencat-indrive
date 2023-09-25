@@ -1,6 +1,7 @@
 package ru.fomenkov.plugin
 
 import org.junit.Test
+import ru.fomenkov.plugin.dagger.DaggerComponentsResolver
 import ru.fomenkov.utils.Log
 
 class DaggerComponentsResolverPlayground {

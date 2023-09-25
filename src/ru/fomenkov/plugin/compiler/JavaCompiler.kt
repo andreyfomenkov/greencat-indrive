@@ -14,6 +14,10 @@ class JavaCompiler(
     private val output = mutableListOf<String>()
 
     override fun run(): Boolean {
+        if (sources.isEmpty()) {
+            Log.v("No source files provided for Java compiler")
+            return true
+        }
         Log.v("\nStarting javac task with ${sources.size} source(s) on thread [${Thread.currentThread().id}]")
         val startTime = System.currentTimeMillis()
         val classpathStr = classpath.joinToString(separator = ":")
