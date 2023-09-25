@@ -14,8 +14,7 @@ class ClassFileInjectionSnapshotPlayground {
 
     @Test
     fun `Test class file injection snapshot`() {
-        val path = "/Users/andreyfomenkov/Workspace/indriver/greencat/build/final/sinet/startup/inDriver/intercity/passenger/order_form/ui/SampleInjectionClass.class"
-//        val path = "/Users/andreyfomenkov/Workspace/indriver/intercity/passenger/order-form/build/tmp/kotlin-classes/debug/sinet/startup/inDriver/intercity/passenger/order_form/ui/OrderFormFragment.class"
+        val path = "test_data/SampleInjectionClass.class"
         val startTime = System.currentTimeMillis()
         val hashValue = ClassFileInjectionSnapshotMaker.make(path)
         val endTime = System.currentTimeMillis()
