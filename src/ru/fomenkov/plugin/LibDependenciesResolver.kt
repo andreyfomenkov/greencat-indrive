@@ -46,7 +46,7 @@ class LibDependenciesResolver(
      */
     fun resolveDependencies(transitive: Boolean): Set<String> {
         if (transitive) {
-            error("Resolving is not implemented for transitive dependencies") // TODO: need to resolve?
+            error("Resolving is not implemented for transitive dependencies. No need for now")
         }
         performChecks()
         Log.v("Resolving dependencies for $groupId:$artifactId:$version")

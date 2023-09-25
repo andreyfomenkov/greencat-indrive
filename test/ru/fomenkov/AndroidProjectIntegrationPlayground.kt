@@ -31,7 +31,7 @@ import java.util.concurrent.Callable
  * [2] Modify files in project to get not empty `git status` command output (optional)
  * [3] Add PACKAGE_NAME and COMPONENT_NAME for Run/Debug configuration
  */
-class AndroidProjectIntegrationTest {
+class AndroidProjectIntegrationPlayground {
 
     private lateinit var executor: WorkerTaskExecutor
 

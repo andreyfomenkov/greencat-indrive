@@ -1,8 +1,10 @@
 package ru.fomenkov.plugin.strategy
 
+import ru.fomenkov.data.Module
 import ru.fomenkov.data.Repository
 import ru.fomenkov.data.Round
 import ru.fomenkov.parser.MetadataDescriptorParser
+import ru.fomenkov.plugin.DaggerComponentsResolver
 import ru.fomenkov.plugin.DaggerGeneratedClassesResolver
 import ru.fomenkov.plugin.LibDependenciesResolver
 import ru.fomenkov.plugin.compiler.CompilerPlugin
@@ -132,7 +134,9 @@ class KaptCompilationStrategy : CompilationStrategy {
 
         // Create compiler for Kotlin files
         val kotlinCompiler = KotlinCompiler(
-            round = round, // TODO: find and add Component classes from modules declared in the current round
+            // Find all @Component classes and add to the sources for the related modules
+            // Necessary to compile when *_Factory or *_MembersInjector classes are changed
+            round = withModuleComponentSources(round),
             compilerPath = Params.KOTLINC,
             plugins = setOf(
                 CompilerPlugin(path = Params.PARCELIZE_PLUGIN_PATH),
@@ -175,6 +179,17 @@ class KaptCompilationStrategy : CompilationStrategy {
         } else {
             CompilationStrategy.Result.OK
         }
+    }
+
+    private fun withModuleComponentSources(round: Round): Round {
+        val items = mutableMapOf<Module, Set<String>>()
+
+        round.items.forEach { (module, sources) ->
+            val componentKtSources = DaggerComponentsResolver(module.path).resolve()
+            items += module to sources + componentKtSources
+            componentKtSources.forEach { path -> Log.v("[@Component] module = ${module.name}, $path") }
+        }
+        return Round(items)
     }
 
     private fun listDaggerClassFilesToRename() = listOf(
