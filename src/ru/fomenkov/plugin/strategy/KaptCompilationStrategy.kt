@@ -7,12 +7,14 @@ import ru.fomenkov.parser.MetadataDescriptorParser
 import ru.fomenkov.plugin.dagger.DaggerComponentsResolver
 import ru.fomenkov.plugin.dagger.DaggerGeneratedClassesResolver
 import ru.fomenkov.plugin.LibDependenciesResolver
+import ru.fomenkov.plugin.bytecode.ClassFileInjectionSnapshotMaker
 import ru.fomenkov.plugin.compiler.CompilerPlugin
 import ru.fomenkov.plugin.compiler.JavaCompiler
 import ru.fomenkov.plugin.compiler.KotlinCompiler
 import ru.fomenkov.plugin.compiler.Params
 import ru.fomenkov.shell.Shell.exec
 import ru.fomenkov.utils.Log
+import ru.fomenkov.utils.Utils
 import ru.fomenkov.utils.WorkerTaskExecutor
 import java.io.File
 import java.util.concurrent.Callable
@@ -80,6 +82,38 @@ class KaptCompilationStrategy : CompilationStrategy {
             "${Params.BUILD_PATH_INTERMEDIATE}/${Params.KAPT_CLASSES_DIR}", // incrementalData
         ) + dependenciesPaths + getProjectClasspath()
 
+        // Create compiler for Kotlin files
+        val kotlinCompiler = KotlinCompiler(
+            round = round,
+            compilerPath = Params.KOTLINC,
+            plugins = setOf(
+                CompilerPlugin(path = Params.PARCELIZE_PLUGIN_PATH),
+            ),
+            classpath = classpath,
+            outputDir = Params.BUILD_PATH_INTERMEDIATE,
+        )
+
+        // Run Kotlin compiler
+        val kotlinCompilerResult = try {
+            kotlinCompiler.run().also { Log.v("Kotlin compiler execution successful") }
+        } catch (error: Throwable) {
+            Log.v("Kotlin compiler execution failed: ${error.message}")
+            false
+        }
+
+        // Check out Kotlin compiler result
+        if (!kotlinCompilerResult) {
+            Log.v("Failed to run Kotlin compiler\n")
+            return CompilationStrategy.Result.Failed(kotlinCompiler.output())
+        }
+
+        // Check whether to run KAPT or not
+        if (!isKaptRunNeeded(round, classpath)) {
+            Log.v("No KAPT running needed")
+            return CompilationStrategy.Result.OK
+        }
+        Log.v("Running KAPT...")
+
         // Dagger won't generate factory and members injector classes once it has been found in project classpath
         // Add to Dagger related *_Factory.class and *_MembersInjector.class files temporary suffix
         val daggerClassesToRename = round.items
@@ -93,7 +127,9 @@ class KaptCompilationStrategy : CompilationStrategy {
 
         // Create compiler for Dagger KAPT and generating stubs
         val kaptCompiler = KotlinCompiler(
-            round = round,
+            // Find all @Component classes and add to the sources for the related modules
+            // Necessary to compile when *_Factory or *_MembersInjector classes are changed
+            round = withModuleComponentSources(round),
             compilerPath = Params.KOTLINC,
             plugins = setOf(
                 setupDaggerPlugin(kaptClasspath = jarPaths),
@@ -103,17 +139,21 @@ class KaptCompilationStrategy : CompilationStrategy {
         )
 
         // Run KAPT and generate stubs
-        try {
-            kaptCompiler.run()
-            Log.v("KAPT successful")
-
+        val kaptResult = try {
+            kaptCompiler.run().also { Log.v("KAPT execution successful") }
         } catch (error: Throwable) {
-            Log.v("Failed to run KAPT: ${error.message}")
-            return CompilationStrategy.Result.Failed(kaptCompiler.output())
+            Log.v("KAPT execution failed: ${error.message}")
+            false
 
         } finally {
             // Rename *_Factory.class_TEMP and *_MembersInjector.class_TEMP files back
             renameFactoryClasses(daggerClassesToRename, toTemp = false)
+        }
+
+        // Check out KAPT result
+        if (!kaptResult) {
+            Log.v("Failed to run KAPT\n")
+            return CompilationStrategy.Result.Failed(kaptCompiler.output())
         }
 
         // Remove generated NonExistentClass.java class
@@ -132,53 +172,74 @@ class KaptCompilationStrategy : CompilationStrategy {
             outputDir = Params.BUILD_PATH_INTERMEDIATE,
         )
 
-        // Create compiler for Kotlin files
-        val kotlinCompiler = KotlinCompiler(
-            // Find all @Component classes and add to the sources for the related modules
-            // Necessary to compile when *_Factory or *_MembersInjector classes are changed
-            round = withModuleComponentSources(round),
-            compilerPath = Params.KOTLINC,
-            plugins = setOf(
-                CompilerPlugin(path = Params.PARCELIZE_PLUGIN_PATH),
-            ),
-            classpath = classpath,
-            outputDir = Params.BUILD_PATH_INTERMEDIATE,
-        )
+        // Run Java compiler to compile KAPT generated classes
+        val javaCompilerResult = try {
+            javaCompiler.run().also { Log.v("Java compiler execution successful") }
+        } catch (error: Throwable) {
+            Log.v("Java compiler execution failed: ${error.message}")
+            false
+        }
 
-        // Create worker tasks
-        val compilerTasks = listOf(
-            Callable {
-                javaCompiler.run().also { result -> Log.v("Running javac ${if (result) "OK" else "FAILED"}") }
-            },
-            Callable {
-                kotlinCompiler.run().also { result -> Log.v("Running kotlinc ${if (result) "OK" else "FAILED"}") }
-            }
-        )
-
-        // Run kotlinc and javac concurrently
-        val compilerResults = WorkerTaskExecutor().let { executor ->
-            try {
-                executor.run(compilerTasks)
-
-            } catch (error: Throwable) {
-                Log.v("Failed to run javac or/and kotlinc: ${error.message}")
-                val javacOutput = javaCompiler.output()
-                val kotlincOutput = kotlinCompiler.output()
-                return CompilationStrategy.Result.Failed(javacOutput + kotlincOutput)
-
-            } finally {
-                executor.release()
-            }
+        // Check out Java compiler result
+        if (!javaCompilerResult) {
+            Log.v("Failed to run Java compiler\n")
+            return CompilationStrategy.Result.Failed(javaCompiler.output())
         }
 
         // Remove Dagger related KAPT directories to exclude *.class files from the resulting DEX patch
         removeDaggerKaptDirectories()
 
-        return if (compilerResults.contains(false)) {
-            CompilationStrategy.Result.Failed(javaCompiler.output() + kotlinCompiler.output())
-        } else {
-            CompilationStrategy.Result.OK
+        // Compilation successful
+        return CompilationStrategy.Result.OK
+    }
+
+    private fun isKaptRunNeeded(round: Round, classpath: Set<String>): Boolean {
+        Log.v("\nInjection snapshot hash values:")
+        val sources = round.items
+            .flatMap { entry -> entry.value }
+            .map { path -> Utils.extractSourceFilePathInModule(path, removeExtension = true) }
+
+        sources.forEach { reference ->
+            // "Previous" class file for path in final directory (if exists)...
+            var classInFinalDir = File("${Params.BUILD_PATH_FINAL}/$reference.class")
+
+            // ... or if doesn't exist, try to find in project classpath, excluding greencat build directories
+            if (!classInFinalDir.exists()) {
+                val modulePaths = round.items.map { (module, _) -> module.path }
+                classpath
+                    .asSequence()
+                    .filterNot { path -> Params.BUILD_PATH_FINAL in path }
+                    .filterNot { path -> Params.BUILD_PATH_INTERMEDIATE in path }
+                    .filterNot { path -> "/tmp/kapt3/" in path } // Exclude classes from KAPT directory
+                    .filter { path ->
+                        modulePaths.find { modulePath -> "$modulePath/" in path } != null
+                    }
+                    .map { path -> File("$path/$reference.class") }
+                    .firstOrNull(File::exists)
+                    ?.let { file -> classInFinalDir = file }
+            }
+            // "Current" class file for path in intermediate directory
+            val classInIntermediateDir = File("${Params.BUILD_PATH_INTERMEDIATE}/$reference.class")
+            val finalHashValue = classInFinalDir
+                .takeIf(File::exists)
+                ?.let { file -> ClassFileInjectionSnapshotMaker.make(file.absolutePath) }
+
+            val intermediateHashValue = classInIntermediateDir
+                .takeIf(File::exists)
+                ?.let { file -> ClassFileInjectionSnapshotMaker.make(file.absolutePath) }
+
+            Log.v("- [CLASS BEFORE] ${classInFinalDir.absolutePath}, #: $finalHashValue")
+            Log.v("- [CLASS AFTER]  ${classInIntermediateDir.absolutePath}, #: $intermediateHashValue")
+
+            // Compare Dagger injection snapshots for both class files
+            if (intermediateHashValue != finalHashValue) {
+                Log.v(" - [INJECTION SNAPSHOT] $reference [CHANGED] => run KAPT")
+                return true
+            } else {
+                Log.v(" - [INJECTION SNAPSHOT] $reference [-]")
+            }
         }
+        return false
     }
 
     private fun withModuleComponentSources(round: Round): Round {

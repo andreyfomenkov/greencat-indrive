@@ -5,7 +5,6 @@ import org.apache.bcel.classfile.ClassParser
 import org.apache.bcel.classfile.Field
 import org.apache.bcel.classfile.FieldOrMethod
 import org.apache.bcel.classfile.Method
-import ru.fomenkov.utils.Log
 
 /**
  * Create snapshot for:
@@ -41,7 +40,6 @@ object ClassFileInjectionSnapshotMaker {
             }
             .sorted()
             .joinToString(separator = "\n")
-            .also { value -> Log.v("Snapshot for $path:\n$value\n") }
         return snapshot.hashCode()
     }
 

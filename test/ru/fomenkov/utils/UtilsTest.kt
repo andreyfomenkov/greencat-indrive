@@ -60,4 +60,36 @@ class UtilsTest {
             Utils.composeClassEntries(paths),
         )
     }
+
+    @Test
+    fun `Test extract source file path in module`() {
+        assertEquals(
+            "ru/fomenkov/Class.kt",
+            Utils.extractSourceFilePathInModule(
+                path = "some/app/module/src/main/java/ru/fomenkov/Class.kt",
+                removeExtension = false,
+            )
+        )
+        assertEquals(
+            "ru/fomenkov/Class",
+            Utils.extractSourceFilePathInModule(
+                path = "some/app/module/src/debug/kotlin/ru/fomenkov/Class.kt",
+                removeExtension = true,
+            )
+        )
+        assertEquals(
+            "ru/fomenkov/Class",
+            Utils.extractSourceFilePathInModule(
+                path = "some/app/module/src/test/java/ru/fomenkov/Class",
+                removeExtension = false,
+            )
+        )
+        assertEquals(
+            "ru/fomenkov/Class",
+            Utils.extractSourceFilePathInModule(
+                path = "some/app/module/src/test/kotlin/ru/fomenkov/Class",
+                removeExtension = true,
+            )
+        )
+    }
 }

@@ -37,4 +37,35 @@ object Utils {
             path.substring(0, index)
         }
             .toSet()
+
+    /**
+     * Input:  some/app/module/src/main/java/com/my/Class.kt
+     * Output: com/my/Class.kt (removeExtension == false), com/my/Class (removeExtension == true)
+     */
+    fun extractSourceFilePathInModule(path: String, removeExtension: Boolean): String {
+        val parts = path.split('/')
+        var srcDirIndex = -1
+
+        for (i in 0 until parts.size - 2) {
+            // Find /src/*/java or /src/*/kotlin path entry
+            if (parts[i] == "src" && (parts[i + 2] == "java" || parts[i + 2] == "kotlin")) {
+                srcDirIndex = i + 3
+                break
+            }
+        }
+        check(srcDirIndex != -1) { "Failed to parse source file path in module: $path" }
+        val output = parts.subList(srcDirIndex, parts.size).joinToString(separator = "/")
+
+        return if (removeExtension) {
+            val dotIndex = output.lastIndexOf(".")
+
+            if (dotIndex == -1) {
+                output
+            } else {
+                output.substring(0, dotIndex)
+            }
+        } else {
+            output
+        }
+    }
 }
