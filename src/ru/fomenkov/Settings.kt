@@ -8,6 +8,7 @@ object Settings {
     var useIncrementalDiff = true
     var usePlainCompilationStrategyOnly = false
 
+    const val GREENCAT_VERSION = "3.0"
     const val SETTINGS_GRADLE_FILE_NAME = "settings.gradle"
     const val BUILD_GRADLE_FILE = "build.gradle"
     const val BUILD_GRADLE_KTS_FILE = "build.gradle.kts"
