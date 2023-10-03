@@ -222,11 +222,11 @@ class KaptCompilationStrategy : CompilationStrategy {
             val classInIntermediateDir = File("${Params.BUILD_PATH_INTERMEDIATE}/$reference.class")
             val finalHashValue = classInFinalDir
                 .takeIf(File::exists)
-                ?.let { file -> ClassFileInjectionSnapshotMaker.make(file.absolutePath) }
+                ?.let { file -> ClassFileInjectionSnapshotMaker.make(file.absolutePath).hashCode() }
 
             val intermediateHashValue = classInIntermediateDir
                 .takeIf(File::exists)
-                ?.let { file -> ClassFileInjectionSnapshotMaker.make(file.absolutePath) }
+                ?.let { file -> ClassFileInjectionSnapshotMaker.make(file.absolutePath).hashCode() }
 
             Log.v("- [CLASS BEFORE] ${classInFinalDir.absolutePath}, #: $finalHashValue")
             Log.v("- [CLASS AFTER]  ${classInIntermediateDir.absolutePath}, #: $intermediateHashValue")

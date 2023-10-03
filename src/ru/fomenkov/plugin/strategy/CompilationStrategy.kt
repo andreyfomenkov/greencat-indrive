@@ -20,5 +20,5 @@ interface CompilationStrategy {
     // 2: build/final
     // 3: other classpath
     fun getProjectClasspath() =
-        setOf(Params.BUILD_PATH_INTERMEDIATE, Params.BUILD_PATH_FINAL) + Repository.Classpath.forProject
+        setOf(Params.BUILD_PATH_INTERMEDIATE, Params.BUILD_PATH_FINAL) + Repository.Classpath.get()
 }

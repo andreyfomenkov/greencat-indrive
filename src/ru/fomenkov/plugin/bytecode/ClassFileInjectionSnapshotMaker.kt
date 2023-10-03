@@ -24,9 +24,9 @@ object ClassFileInjectionSnapshotMaker {
     private const val ASSISTED_INJECT_ANNOTATION_TYPE = "Ldagger/assisted/AssistedInject;"
 
     /**
-     * @return Snapshot hash value
+     * @return Snapshot value
      */
-    fun make(path: String): Int {
+    fun make(path: String): String {
         val clazz = ClassParser(path).parse()
         val methods = clazz.methods.filter(::hasInjectionAnnotation)
         val fields = clazz.fields.filter(::hasInjectionAnnotation)
@@ -40,7 +40,7 @@ object ClassFileInjectionSnapshotMaker {
             }
             .sorted()
             .joinToString(separator = "\n")
-        return snapshot.hashCode()
+        return snapshot
     }
 
     private fun getMethodSnapshot(method: Method) = "${method.name}, ${method.signature}"

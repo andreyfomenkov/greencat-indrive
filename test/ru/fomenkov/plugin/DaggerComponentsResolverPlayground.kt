@@ -1,9 +1,11 @@
 package ru.fomenkov.plugin
 
+import org.junit.Ignore
 import org.junit.Test
 import ru.fomenkov.plugin.dagger.DaggerComponentsResolver
 import ru.fomenkov.utils.Log
 
+@Ignore("Playground test")
 class DaggerComponentsResolverPlayground {
 
     @Test

@@ -15,11 +15,13 @@ class ArgumentsParserTest {
                 packageName = "pn",
                 componentName = "cn",
                 focusedFilePath = "fo",
+                verboseLogging = true,
             ),
             ArgumentsParser(
                 listOf(
                     "-classpath", "cp",
                     "-package", "pn",
+                    "-verbose",
                     "-component", "cn",
                     "-focus", "fo",
                 )

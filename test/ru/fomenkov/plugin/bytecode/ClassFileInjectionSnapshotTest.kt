@@ -1,5 +1,6 @@
 package ru.fomenkov.plugin.bytecode
 
+import org.junit.Assert.assertEquals
 import org.junit.Before
 import org.junit.Test
 import ru.fomenkov.utils.Log
@@ -49,7 +50,7 @@ import ru.fomenkov.utils.Log
  *     }
  * }
  */
-class ClassFileInjectionSnapshotPlayground {
+class ClassFileInjectionSnapshotTest {
 
     @Before
     fun setup() {
@@ -60,10 +61,19 @@ class ClassFileInjectionSnapshotPlayground {
     fun `Test class file injection snapshot`() {
         val path = "test_data/SampleInjectionClass.class"
         val startTime = System.currentTimeMillis()
-        val hashValue = ClassFileInjectionSnapshotMaker.make(path)
+        val actualSnapshot = ClassFileInjectionSnapshotMaker.make(path)
         val endTime = System.currentTimeMillis()
+        val expectedSnapshot = """
+               <init>, (I)V
+               <init>, (JLjava/lang/String;)V
+               barInj, (IJ)D
+               fooInj, (I)Ljava/lang/String;
+               lat1, Ljava/lang/String;
+        """.trimIndent()
 
-        Log.d("Snapshot hash value: $hashValue")
+        Log.d("Snapshot value: $actualSnapshot, hash value: ${actualSnapshot.hashCode()}")
         Log.d("# Execution time: ${endTime - startTime} ms #")
+
+        assertEquals(expectedSnapshot, actualSnapshot)
     }
 }

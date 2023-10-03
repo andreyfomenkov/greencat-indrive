@@ -235,6 +235,22 @@ class RepositoryTest {
         assertChildModules(root = "m9")
     }
 
+    @Test
+    fun `Test set and get classpath`() {
+        val classpath = setOf("a", "b", "c", "1", "2", "3")
+        Repository.Classpath.clear()
+
+        assertTrue(Repository.Classpath.get().isEmpty())
+
+        Repository.Classpath.set(classpath)
+
+        assertEquals(classpath, Repository.Classpath.get())
+
+        Repository.Classpath.clear()
+
+        assertTrue(Repository.Classpath.get().isEmpty())
+    }
+
     private fun toModule(name: String) = Utils.toModule(name)
 
     private fun toModules(vararg names: String) = names.map { name -> Utils.toModule(name) }.toSet()

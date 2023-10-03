@@ -107,15 +107,18 @@ object Repository {
         }
     }
 
-    // TODO: get classpath from IDE via main function arguments
     object Classpath {
+        private val classpath = mutableSetOf<String>()
 
-        val forProject = File("~/Workspace/classpath.txt".noTilda())
-            .readText()
-            .split(':')
-            .filterNot { path -> path.endsWith(".xml") ||  path.endsWith("/res") }
-            .filter { path -> File(path).exists() }
-            .toSet()
+        fun get(): Set<String> = classpath
+
+        fun set(classpath: Set<String>) {
+            this.classpath += classpath
+        }
+
+        fun clear() {
+            classpath.clear()
+        }
     }
 
     /**
