@@ -7,6 +7,7 @@ import org.junit.Test
 import ru.fomenkov.Settings
 import ru.fomenkov.data.Module
 import ru.fomenkov.data.Round
+import ru.fomenkov.utils.Log
 import java.io.File
 import java.lang.IllegalStateException
 
@@ -16,7 +17,7 @@ class CompilationStrategySelectorTest {
 
     @Before
     fun setup() {
-        Settings.isVerboseMode = true
+        Log.level = Log.Level.VERBOSE
         createTestFileSystemDirectory()
     }
 

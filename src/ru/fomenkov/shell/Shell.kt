@@ -40,7 +40,7 @@ object Shell {
                         do {
                             line = errorReader.readLine() ?: break
                             output += line
-                            Log.e(line)
+                            Log.d(line)
                         } while (line != null)
                         do {
                             line = inputReader.readLine() ?: break
@@ -56,7 +56,7 @@ object Shell {
             return output
 
         } catch (error: Throwable) {
-            Log.e("Failed to execute shell command: $cmd\nError: ${error.message}")
+            Log.d("Failed to execute shell command: $cmd\nError: ${error.message}")
             return null
         }
     }

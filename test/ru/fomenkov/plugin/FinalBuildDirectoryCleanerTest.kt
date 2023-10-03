@@ -7,6 +7,7 @@ import org.junit.Before
 import org.junit.Test
 import ru.fomenkov.Settings
 import ru.fomenkov.shell.Shell.exec
+import ru.fomenkov.utils.Log
 import java.io.File
 
 class FinalBuildDirectoryCleanerTest {
@@ -16,7 +17,7 @@ class FinalBuildDirectoryCleanerTest {
 
     @Before
     fun setup() {
-        Settings.isVerboseMode = true
+        Log.level = Log.Level.VERBOSE
         exec("rm -rf $testRootDirectory")
         Assert.assertFalse(File(testRootDirectory).exists())
 

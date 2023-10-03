@@ -7,13 +7,14 @@ import ru.fomenkov.Settings
 import ru.fomenkov.data.Dependency
 import ru.fomenkov.data.Repository
 import ru.fomenkov.data.Round
+import ru.fomenkov.utils.Log
 import ru.fomenkov.utils.Utils
 
 class CompilationRoundsBuilderTest {
 
     @Before
     fun setup() {
-        Settings.isVerboseMode = true
+        Log.level = Log.Level.VERBOSE
         Repository.Graph.clear()
     }
 

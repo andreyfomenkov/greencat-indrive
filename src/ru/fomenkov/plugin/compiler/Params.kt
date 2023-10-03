@@ -11,7 +11,7 @@ object Params {
     val GRADLE_CACHE_TRANSFORMS_PATH = "$ROOT_GRADLE_CACHE_PATH/transforms-3"
 
     // Compiler and plugins
-    private val KOTLIN_PLUGIN_PATH = "~/Downloads".noTilda() // TODO: download relaxed compiler
+    private val KOTLIN_PLUGIN_PATH = "/Applications/Android Studio.app/Contents/plugins/Kotlin".noTilda() // TODO: download relaxed compiler
     val KOTLINC = "$KOTLIN_PLUGIN_PATH/kotlinc/bin/kotlinc"
     val PARCELIZE_PLUGIN_PATH = "$KOTLIN_PLUGIN_PATH/kotlinc/lib/parcelize-compiler.jar"
     val KAPT_PLUGIN_PATH = "$KOTLIN_PLUGIN_PATH/kotlinc/lib/kotlin-annotation-processing.jar"

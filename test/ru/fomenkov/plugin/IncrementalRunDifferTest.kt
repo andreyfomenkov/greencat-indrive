@@ -23,7 +23,7 @@ class IncrementalRunDifferTest {
 
     @Before
     fun setup() {
-        Settings.isVerboseMode = true
+        Log.level = Log.Level.VERBOSE
         exec("rm -rf $testRootDirectory")
         assertFalse(File(testRootDirectory).exists())
 

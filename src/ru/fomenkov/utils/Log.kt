@@ -1,25 +1,28 @@
 package ru.fomenkov.utils
 
-import ru.fomenkov.Settings
-
 object Log {
 
-    fun d(message: String) {
-        println(message)
-    }
+    enum class Level { INFO, DEBUG, VERBOSE }
+    var level = Level.INFO
 
-    fun e(message: String) {
-        println(message)
-    }
-
-    fun v(message: String) {
-        if (Settings.isVerboseMode) {
+    fun i(message: String) {
+        if (level == Level.INFO || level == Level.DEBUG || level == Level.VERBOSE) {
             println(message)
         }
     }
 
+    fun d(message: String) {
+        if (level == Level.DEBUG || level == Level.VERBOSE) {
+            println(message)
+        }
+    }
+
+    fun v(message: String) {
+        v(true, message)
+    }
+
     fun v(display: Boolean, message: String) {
-        if (display && Settings.isVerboseMode) {
+        if (display && level == Level.VERBOSE) {
             println(message)
         }
     }

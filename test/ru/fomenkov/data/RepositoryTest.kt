@@ -4,13 +4,14 @@ import org.junit.Assert.*
 import org.junit.Before
 import org.junit.Test
 import ru.fomenkov.Settings
+import ru.fomenkov.utils.Log
 import ru.fomenkov.utils.Utils
 
 class RepositoryTest {
 
     @Before
     fun setup() {
-        Settings.isVerboseMode = true
+        Log.level = Log.Level.VERBOSE
         Repository.Modules.clear()
         Repository.Graph.clear()
     }

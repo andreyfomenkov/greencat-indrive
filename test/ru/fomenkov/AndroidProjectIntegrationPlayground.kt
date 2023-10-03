@@ -38,13 +38,13 @@ class AndroidProjectIntegrationPlayground {
     @Before
     fun setup() {
         with(Settings) {
-            isVerboseMode = true
             displayModuleDependencies = false
             displayResolvingChildModules = false
             displayKotlinCompilerModuleNames = false
-            useIncrementalDiff = false
+            useIncrementalDiff = true
             usePlainCompilationStrategyOnly = false
         }
+        Log.level = Log.Level.VERBOSE
         Repository.Modules.clear()
         Repository.Graph.clear()
         Repository.CompilerModuleNameParam.clear()

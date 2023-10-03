@@ -10,7 +10,7 @@ class LibDependenciesResolverTest {
 
     @Before
     fun setup() {
-        Settings.isVerboseMode = true
+        Log.level = Log.Level.VERBOSE
     }
 
     @Test

@@ -2,7 +2,6 @@ package ru.fomenkov
 
 object Settings {
     // User for testing
-    var isVerboseMode = false
     var displayModuleDependencies = false
     var displayResolvingChildModules = false
     var displayKotlinCompilerModuleNames = false
