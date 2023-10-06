@@ -68,4 +68,17 @@ object Utils {
             output
         }
     }
+
+    fun printTextInFrame(text: String) {
+        val vItem = '|'
+        val hItem = '-'
+        val padding = 4
+        val line = hItem.toString().repeat(text.length + padding)
+        val spaces = " ".repeat(text.length + padding)
+        Log.i("+$line+")
+        Log.i("$vItem$spaces$vItem")
+        Log.i("$vItem  $text  $vItem")
+        Log.i("$vItem$spaces$vItem")
+        Log.i("+$line+")
+    }
 }

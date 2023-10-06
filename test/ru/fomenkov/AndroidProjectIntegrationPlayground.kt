@@ -24,7 +24,7 @@ class AndroidProjectIntegrationPlayground {
             displayModuleDependencies = false
             displayResolvingChildModules = false
             displayKotlinCompilerModuleNames = false
-            useIncrementalDiff = true
+            useIncrementalDiff = false
             usePlainCompilationStrategyOnly = false
         }
         Log.level = Log.Level.INFO

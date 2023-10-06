@@ -25,8 +25,14 @@ import java.io.File
 import java.util.concurrent.Callable
 
 fun main(vararg args: String) {
+    with(Settings) {
+        displayModuleDependencies = false
+        displayResolvingChildModules = false
+        displayKotlinCompilerModuleNames = false
+        useIncrementalDiff = true
+        usePlainCompilationStrategyOnly = false
+    }
     Log.level = Log.Level.INFO
-
     ArgumentsParser(args.toList())
         .parse()
         ?.let { result ->
@@ -41,6 +47,8 @@ fun main(vararg args: String) {
                     packageName = result.packageName,
                     componentName = result.componentName,
                 )
+            } catch (error: Throwable) {
+                Utils.printTextInFrame(error.localizedMessage)
             } finally {
                 plugin.release()
             }
@@ -49,16 +57,6 @@ fun main(vararg args: String) {
 
 class GreenCat(private val executor: WorkerTaskExecutor) {
 
-    init {
-        with(Settings) {
-            displayModuleDependencies = false
-            displayResolvingChildModules = false
-            displayKotlinCompilerModuleNames = false
-            useIncrementalDiff = true
-            usePlainCompilationStrategyOnly = false
-        }
-    }
-
     fun launch(
         classpath: Set<String>,
         packageName: String,
@@ -66,6 +64,10 @@ class GreenCat(private val executor: WorkerTaskExecutor) {
     ) {
         Repository.Classpath.set(classpath)
         val totalTimeStart = System.currentTimeMillis()
+
+        // Display plugin info
+        Log.i("GreenCat v${Settings.GREENCAT_VERSION}")
+        Log.i("GitHub: https://github.com/andreyfomenkov/greencat-indrive\n")
 
         // Check working directory
         checkWorkingDirectory()
@@ -110,7 +112,7 @@ class GreenCat(private val executor: WorkerTaskExecutor) {
         }
 
         // Get project git diff files (see step [2] above)
-        val gitDiffFiles = getProjectGitDiffFiles()
+        val (branchName, gitDiffFiles) = getProjectGitDiffFiles()
 
         // Split supported and not supported source files
         val (supportedSourceFiles, unknownSourceFiles) = gitDiffFiles.partition(Utils::isSourceFileSupported)
@@ -148,6 +150,9 @@ class GreenCat(private val executor: WorkerTaskExecutor) {
             removeSourcePaths.forEach { path -> Log.d("[REMOVE]  $path") }
         }
 
+        // Print diff details
+        printSourcesDiff(branchName, supportedSourceFiles, compileSourcePaths.toList(), unknownSourceFiles)
+
         // Check single Android device is connected
         checkAndroidDeviceConnected()
 
@@ -167,10 +172,12 @@ class GreenCat(private val executor: WorkerTaskExecutor) {
                 removeFinalBuildDirectory()
                 removePatchesOnDevice()
                 restartApp(packageName, componentName)
+
+                Utils.printTextInFrame("No supported files to compile or diff is empty. Only *.kt sources are allowed")
                 return
             }
             compileSourcePaths.isEmpty() && removeSourcePaths.isEmpty() -> {
-                Log.d("\n# Nothing to compile and remove since the previous incremental run #")
+                Log.d("\n# Nothing to compile and remove since the last incremental run #")
                 Log.d(" - push existing patch if any to Android device")
                 Log.d(" - restart application")
 
@@ -178,6 +185,8 @@ class GreenCat(private val executor: WorkerTaskExecutor) {
                     pushPatchToDevice(dstDexPatchPath)
                 }
                 restartApp(packageName, componentName)
+
+                Utils.printTextInFrame("Everything is up to date since the last incremental run")
                 return
             }
             compileSourcePaths.isEmpty() -> {
@@ -191,6 +200,9 @@ class GreenCat(private val executor: WorkerTaskExecutor) {
                 buildDexPatch()
                 pushPatchToDevice(dstDexPatchPath)
                 restartApp(packageName, componentName)
+
+                printPatchSize()
+                printTotalTimeSpent(totalTimeStart)
                 return
             }
         }
@@ -200,6 +212,7 @@ class GreenCat(private val executor: WorkerTaskExecutor) {
 
         // Compose compilation rounds
         val rounds = composeCompilationRounds(compileSourcePaths)
+        Log.i("Building patch...")
 
         // Perform compilation for all rounds
         compileRounds(rounds).let { result ->
@@ -212,6 +225,12 @@ class GreenCat(private val executor: WorkerTaskExecutor) {
                 result.output.forEach(Log::d)
                 recreateIntermediateBuildDirectory()
                 removeFinalBuildDirectory()
+
+                if (Log.level == Log.Level.INFO) {
+                    Log.dumpDebugLogs()
+                }
+                Log.i("")
+                Utils.printTextInFrame("Compilation failed")
                 return
             }
         }
@@ -237,11 +256,52 @@ class GreenCat(private val executor: WorkerTaskExecutor) {
         // Restart app
         restartApp(packageName, componentName)
 
-        // Total time output
-        val totalTimeEnd = System.currentTimeMillis()
+        // Total time and patch size output
+        printPatchSize()
+        printTotalTimeSpent(totalTimeStart)
+    }
+
+    private fun printSourcesDiff(
+        branchName: String,
+        supportedFiles: List<String>,
+        compiledFiles: List<String>,
+        unknownFiles: List<String>,
+    ) {
+        if (supportedFiles.isNotEmpty()) {
+            Log.i("Source files to compile on branch `$branchName`:")
+
+            supportedFiles.forEach { path ->
+                if (path in compiledFiles) {
+                    Log.i(" - [*] $path")
+                } else {
+                    Log.i(" - [ ] $path")
+                }
+            }
+        }
+        if (unknownFiles.isNotEmpty()) {
+            if (supportedFiles.isNotEmpty()) {
+                Log.i("")
+            }
+            Log.i("Ignored files (no supported):")
+
+            unknownFiles.forEach { path -> Log.i(" - $path") }
+        }
+        if (supportedFiles.isNotEmpty() || unknownFiles.isNotEmpty()) {
+            Log.i("")
+        }
+    }
+
+    private fun printPatchSize() {
         val dexFile = File(Params.DEX_PATCH_SOURCE_PATH)
         check(dexFile.exists()) { "No DEX file found: ${Params.DEX_PATCH_SOURCE_PATH}" }
-        Log.d("\n### Total time: ${(totalTimeEnd - totalTimeStart) / 1000} sec, size: ${dexFile.length() / 1024} KB ###")
+
+        val patchSizeKb = dexFile.length() / 1024
+        Log.i("Patch size: $patchSizeKb KB\n")
+    }
+
+    private fun printTotalTimeSpent(totalTimeStart: Long) {
+        val totalTimeSec = (System.currentTimeMillis() - totalTimeStart) / 1000
+        Utils.printTextInFrame("Build & deploy complete in $totalTimeSec sec")
     }
 
     private fun checkWorkingDirectory() {
@@ -337,11 +397,11 @@ class GreenCat(private val executor: WorkerTaskExecutor) {
         Repository.Graph.setup(graph)
     }
 
-    private fun getProjectGitDiffFiles(): Set<String> {
+    private fun getProjectGitDiffFiles(): Pair<String, Set<String>> {
         val (gitDiffOutput) = exec("export LANG=en_US; git status")
         val dirtySourcesResult = GitStatusParser(gitDiffOutput).parse()
         Log.d("Current branch name: ${dirtySourcesResult.branch}\n")
-        return dirtySourcesResult.files
+        return dirtySourcesResult.branch to dirtySourcesResult.files
     }
 
     private fun analyzeIncrementalDiff(
