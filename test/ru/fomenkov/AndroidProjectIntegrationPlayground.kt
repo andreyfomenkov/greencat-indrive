@@ -27,7 +27,7 @@ class AndroidProjectIntegrationPlayground {
             useIncrementalDiff = false
             usePlainCompilationStrategyOnly = false
         }
-        Log.level = Log.Level.INFO
+        Log.level = Log.Level.DEBUG
         Repository.Modules.clear()
         Repository.Graph.clear()
         Repository.CompilerModuleNameParam.clear()

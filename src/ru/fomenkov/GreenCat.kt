@@ -1,6 +1,7 @@
 package ru.fomenkov
 
 import org.junit.Assert
+import ru.fomenkov.analytics.Analytics
 import ru.fomenkov.data.Dependency
 import ru.fomenkov.data.Module
 import ru.fomenkov.data.Repository
@@ -17,14 +18,12 @@ import ru.fomenkov.plugin.strategy.CompilationStrategy
 import ru.fomenkov.plugin.strategy.CompilationStrategySelector
 import ru.fomenkov.shell.Shell.exec
 import ru.fomenkov.shell.ShellCommandsValidator
-import ru.fomenkov.utils.CompilerModuleNameResolver
-import ru.fomenkov.utils.Log
-import ru.fomenkov.utils.Utils
-import ru.fomenkov.utils.WorkerTaskExecutor
+import ru.fomenkov.utils.*
 import java.io.File
 import java.util.concurrent.Callable
 
 fun main(vararg args: String) {
+    Analytics.launch()
     with(Settings) {
         displayModuleDependencies = false
         displayResolvingChildModules = false
@@ -62,7 +61,7 @@ class GreenCat(private val executor: WorkerTaskExecutor) {
         packageName: String,
         componentName: String,
     ) {
-        Repository.Classpath.set(classpath)
+        Repository.Classpath.set(filterClasspath(classpath))
         val totalTimeStart = System.currentTimeMillis()
 
         // Display plugin info
@@ -120,6 +119,11 @@ class GreenCat(private val executor: WorkerTaskExecutor) {
         // Show details in case no supported source files found
         var isEmptyGitDiff = false
 
+        // TODO: if new directory with files is added, `git status` will show directory only? List all files?
+        // TODO: dump build logs in greencat/build/build.log file
+        // TODO: Mixpanel analytics
+        // TODO: checkout to other branch -> clear /build directory?
+
         if (supportedSourceFiles.isEmpty() && unknownSourceFiles.isEmpty()) {
             Log.d("\nNothing to compile. Please modify supported files to proceed")
             isEmptyGitDiff = true
@@ -173,7 +177,10 @@ class GreenCat(private val executor: WorkerTaskExecutor) {
                 removePatchesOnDevice()
                 restartApp(packageName, componentName)
 
-                Utils.printTextInFrame("No supported files to compile or diff is empty. Only *.kt sources are allowed")
+                "No supported files to compile or diff is empty. Only *.kt sources are allowed".let {
+                    Utils.printTextInFrame(it)
+                    Analytics.drop(it)
+                }
                 return
             }
             compileSourcePaths.isEmpty() && removeSourcePaths.isEmpty() -> {
@@ -186,7 +193,10 @@ class GreenCat(private val executor: WorkerTaskExecutor) {
                 }
                 restartApp(packageName, componentName)
 
-                Utils.printTextInFrame("Everything is up to date since the last incremental run")
+                "Everything is up to date since the last incremental run".let {
+                    Utils.printTextInFrame(it)
+                    Analytics.drop(it)
+                }
                 return
             }
             compileSourcePaths.isEmpty() -> {
@@ -202,7 +212,8 @@ class GreenCat(private val executor: WorkerTaskExecutor) {
                 restartApp(packageName, componentName)
 
                 printPatchSize()
-                printTotalTimeSpent(totalTimeStart)
+                val duration = printTotalTimeSpent(totalTimeStart)
+                Analytics.complete(duration)
                 return
             }
         }
@@ -231,6 +242,7 @@ class GreenCat(private val executor: WorkerTaskExecutor) {
                 }
                 Log.i("")
                 Utils.printTextInFrame("Compilation failed")
+                Analytics.failed("Compilation failed")
                 return
             }
         }
@@ -258,7 +270,8 @@ class GreenCat(private val executor: WorkerTaskExecutor) {
 
         // Total time and patch size output
         printPatchSize()
-        printTotalTimeSpent(totalTimeStart)
+        val duration = printTotalTimeSpent(totalTimeStart)
+        Analytics.complete(duration)
     }
 
     private fun printSourcesDiff(
@@ -282,7 +295,7 @@ class GreenCat(private val executor: WorkerTaskExecutor) {
             if (supportedFiles.isNotEmpty()) {
                 Log.i("")
             }
-            Log.i("Ignored files (no supported):")
+            Log.i("Ignored files (not supported):")
 
             unknownFiles.forEach { path -> Log.i(" - $path") }
         }
@@ -299,10 +312,17 @@ class GreenCat(private val executor: WorkerTaskExecutor) {
         Log.i("Patch size: $patchSizeKb KB\n")
     }
 
-    private fun printTotalTimeSpent(totalTimeStart: Long) {
+    private fun printTotalTimeSpent(totalTimeStart: Long): Long {
         val totalTimeSec = (System.currentTimeMillis() - totalTimeStart) / 1000
         Utils.printTextInFrame("Build & deploy complete in $totalTimeSec sec")
+        return totalTimeSec
     }
+
+    private fun filterClasspath(classpath: Set<String>) =
+        classpath
+            .filterNot { path -> path.endsWith(".xml") || path.endsWith("/res") }
+            .filter { path -> File(path).exists() }
+            .toSet()
 
     private fun checkWorkingDirectory() {
         Log.d("Current working directory: ${File("").absolutePath}")
