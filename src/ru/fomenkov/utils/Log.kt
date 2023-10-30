@@ -31,7 +31,9 @@ object Log {
         debugLogsCollector += message
     }
 
-    fun dumpDebugLogs() {
+    fun printDebugLogs() {
         debugLogsCollector.forEach(::println)
     }
+
+    fun getDebugLogs() = debugLogsCollector.toList()
 }

@@ -5,6 +5,7 @@ import org.junit.Ignore
 import org.junit.Test
 import ru.fomenkov.data.Repository
 import ru.fomenkov.parser.*
+import ru.fomenkov.plugin.compiler.Params
 import ru.fomenkov.utils.*
 import java.io.File
 
@@ -48,9 +49,16 @@ class AndroidProjectIntegrationPlayground {
                 packageName = packageName,
                 componentName = componentName,
             )
+        } catch (_: Throwable) {
+            dumpLBuildLogs()
         } finally {
             plugin.release()
         }
+    }
+
+    private fun dumpLBuildLogs() {
+        val logs = Log.getDebugLogs().joinToString(separator = "\n")
+        File(Params.BUILD_LOG_FILE_PATH).writeText(logs)
     }
 
     private fun loadClasspathFromFile(): Set<String> {

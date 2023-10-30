@@ -11,3 +11,4 @@ hs_err_*
 test_fs
 test_differ
 test_cleaner
+test_data/prefs

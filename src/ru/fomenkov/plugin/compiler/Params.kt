@@ -20,12 +20,14 @@ object Params {
     const val KAPT_INCREMENTAL_DATA_DIR = "incrementalData"
     const val KAPT_STUBS_DIR = "stubs"
 
-    // Build directories
-    private const val GREENCAT_ROOT_PATH = "greencat"
+    // Build directories and data files
+    const val GREENCAT_ROOT_PATH = "greencat"
     const val BUILD_PATH_FINAL = "$GREENCAT_ROOT_PATH/build/final"
     const val BUILD_PATH_INTERMEDIATE = "$GREENCAT_ROOT_PATH/build/intermediate"
-    const val DEX_FILE_PATH = "$GREENCAT_ROOT_PATH/build"
-    const val DEX_PATCH_SOURCE_PATH = "$DEX_FILE_PATH/classes.dex"
+    const val BUILD_DIRECTORY = "$GREENCAT_ROOT_PATH/build"
+    const val DEX_PATCH_SOURCE_PATH = "$BUILD_DIRECTORY/classes.dex"
+    const val BUILD_LOG_FILE_PATH = "$BUILD_DIRECTORY/build.log"
+    const val METADATA_DIFF_FILE_NAME = "metadata.diff"
 
     // Android SDK and tools paths
     val ANDROID_SDK_ROOT_PATH = "~/Library/Android/sdk".noTilda()

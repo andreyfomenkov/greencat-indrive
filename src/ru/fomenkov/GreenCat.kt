@@ -47,6 +47,8 @@ fun main(vararg args: String) {
                     componentName = result.componentName,
                 )
             } catch (error: Throwable) {
+                val logs = Log.getDebugLogs().joinToString(separator = "\n")
+                File(Params.BUILD_LOG_FILE_PATH).writeText(logs)
                 Utils.printTextInFrame(error.localizedMessage)
             } finally {
                 plugin.release()
@@ -119,10 +121,8 @@ class GreenCat(private val executor: WorkerTaskExecutor) {
         // Show details in case no supported source files found
         var isEmptyGitDiff = false
 
-        // TODO: if new directory with files is added, `git status` will show directory only? List all files?
-        // TODO: dump build logs in greencat/build/build.log file
-        // TODO: Mixpanel analytics
         // TODO: checkout to other branch -> clear /build directory?
+        // TODO: build/final is not cleared + metadata
 
         if (supportedSourceFiles.isEmpty() && unknownSourceFiles.isEmpty()) {
             Log.d("\nNothing to compile. Please modify supported files to proceed")
@@ -181,6 +181,7 @@ class GreenCat(private val executor: WorkerTaskExecutor) {
                     Utils.printTextInFrame(it)
                     Analytics.drop(it)
                 }
+                dumpBuildLogs()
                 return
             }
             compileSourcePaths.isEmpty() && removeSourcePaths.isEmpty() -> {
@@ -197,6 +198,7 @@ class GreenCat(private val executor: WorkerTaskExecutor) {
                     Utils.printTextInFrame(it)
                     Analytics.drop(it)
                 }
+                dumpBuildLogs()
                 return
             }
             compileSourcePaths.isEmpty() -> {
@@ -214,6 +216,7 @@ class GreenCat(private val executor: WorkerTaskExecutor) {
                 printPatchSize()
                 val duration = printTotalTimeSpent(totalTimeStart)
                 Analytics.complete(duration)
+                dumpBuildLogs()
                 return
             }
         }
@@ -238,11 +241,12 @@ class GreenCat(private val executor: WorkerTaskExecutor) {
                 removeFinalBuildDirectory()
 
                 if (Log.level == Log.Level.INFO) {
-                    Log.dumpDebugLogs()
+                    Log.printDebugLogs()
                 }
                 Log.i("")
                 Utils.printTextInFrame("Compilation failed")
                 Analytics.failed("Compilation failed")
+                dumpBuildLogs()
                 return
             }
         }
@@ -268,10 +272,18 @@ class GreenCat(private val executor: WorkerTaskExecutor) {
         // Restart app
         restartApp(packageName, componentName)
 
+        // Dump build logs
+        dumpBuildLogs()
+
         // Total time and patch size output
         printPatchSize()
         val duration = printTotalTimeSpent(totalTimeStart)
         Analytics.complete(duration)
+    }
+
+    private fun dumpBuildLogs() {
+        val logs = Log.getDebugLogs().joinToString(separator = "\n")
+        File(Params.BUILD_LOG_FILE_PATH).writeText(logs)
     }
 
     private fun printSourcesDiff(

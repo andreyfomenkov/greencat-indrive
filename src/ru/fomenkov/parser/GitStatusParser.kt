@@ -1,5 +1,8 @@
 package ru.fomenkov.parser
 
+import ru.fomenkov.shell.Shell.exec
+import java.io.File
+
 class GitStatusParser(private val input: List<String>) {
 
     data class Output(val branch: String, val files: Set<String>)
@@ -31,7 +34,21 @@ class GitStatusParser(private val input: List<String>) {
                             check(branch.isNotBlank()) { "No branch name parsed" }
                             return Output(branch, paths)
                         } else {
-                            paths += line.trim()
+                            val file = File(line)
+
+                            if (file.exists()) {
+                                if (file.isDirectory) {
+                                    exec("find ${file.absolutePath} -name '*.*'").let { result ->
+                                        if (result.successful) {
+                                            paths += result.output
+                                        } else {
+                                            error("Failed to list files in untracked directory ${file.absolutePath}")
+                                        }
+                                    }
+                                } else {
+                                    paths += line.trim()
+                                }
+                            }
                         }
                     }
                 }

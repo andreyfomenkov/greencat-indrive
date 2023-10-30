@@ -41,7 +41,7 @@ object DexPatchCompiler {
         val classFilesParam = classFilePaths.joinToString(separator = " ") { path ->
             path.replace("$", "\\$")
         }
-        val result = exec("$d8Path $classFilesParam --output ${Params.DEX_FILE_PATH}")
+        val result = exec("$d8Path $classFilesParam --output ${Params.BUILD_DIRECTORY}")
         output += result.output
         return result.successful
     }

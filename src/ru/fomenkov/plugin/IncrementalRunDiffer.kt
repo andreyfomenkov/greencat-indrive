@@ -1,5 +1,6 @@
 package ru.fomenkov.plugin
 
+import ru.fomenkov.plugin.compiler.Params
 import ru.fomenkov.utils.Log
 import ru.fomenkov.utils.WorkerTaskExecutor
 import java.io.File
@@ -14,8 +15,6 @@ class IncrementalRunDiffer(
         val compileSourcePaths: Set<String>,
         val removeSourcePaths: Set<String>,
     )
-
-    private val metadataFileName = "metadata.diff"
 
     /**
      * Get all dirty source files and return file subsets to compile
@@ -80,11 +79,11 @@ class IncrementalRunDiffer(
      */
     private fun writeHashTable(hashTable: Map<String, Int>) {
         val text = hashTable.entries.joinToString(separator = "\n") { (path, hash) -> "$path#$hash" }
-        File("$finalBuildPath/$metadataFileName").writeText(text)
+        File("$finalBuildPath/${Params.METADATA_DIFF_FILE_NAME}").writeText(text)
     }
 
     private fun readHashTable(): Map<String, Int> {
-        val file = File("$finalBuildPath/$metadataFileName")
+        val file = File("$finalBuildPath/${Params.METADATA_DIFF_FILE_NAME}")
 
         if (!file.exists()) {
             return emptyMap()

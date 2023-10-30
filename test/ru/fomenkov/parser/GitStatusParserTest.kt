@@ -40,7 +40,7 @@ class GitStatusParserTest {
                     "project/FooBarDecorationRenamed.kt",
                     "project/FooBarFragment.kt",
                     "project/FooBarInteractor.kt",
-                    "project/FooBar.kt",
+                    // File "project/FooBar.kt" was excluded, because it doesn't exist for test
                 ),
             ),
             parser.parse(),
