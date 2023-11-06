@@ -121,7 +121,6 @@ class GreenCat(private val executor: WorkerTaskExecutor) {
         // Show details in case no supported source files found
         var isEmptyGitDiff = false
 
-        // TODO: checkout to other branch -> clear /build directory?
         // TODO: build/final is not cleared + metadata
 
         if (supportedSourceFiles.isEmpty() && unknownSourceFiles.isEmpty()) {
