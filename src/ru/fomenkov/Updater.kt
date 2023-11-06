@@ -1,5 +1,6 @@
 package ru.fomenkov
 
+import ru.fomenkov.analytics.Analytics
 import ru.fomenkov.shell.Shell.exec
 import ru.fomenkov.plugin.compiler.Params
 import ru.fomenkov.prefs.Prefs
@@ -12,8 +13,7 @@ fun main(vararg args: String) {
 
 object Updater {
 
-    // TODO: replace with greencat-indrive repository
-    private const val PLUGIN_VERSION_INFO_URL = "https://raw.githubusercontent.com/andreyfomenkov/green-cat/master/artifacts/version-info"
+    private const val PLUGIN_VERSION_INFO_URL = "https://raw.githubusercontent.com/andreyfomenkov/greencat-indrive/master/artifacts/version-info"
     private const val COMPILER_VERSION_INFO_URL = "https://raw.githubusercontent.com/andreyfomenkov/kotlin-relaxed/relaxed-restrictions/artifact/date"
     private const val PLUGIN_FILE_NAME = "greencat.jar"
     private const val COMPILER_DIR = "kotlinc"
@@ -41,19 +41,23 @@ object Updater {
         }
         if (needToUpdatePlugin) {
             if (!downloadArtifact(dstDir, pluginUrl, PLUGIN_FILE_NAME)) {
+                Analytics.pluginUpdated(version = pluginVersion, successful = false)
                 return
             }
             markPluginUpdated(dstDir, pluginVersion)
+            Analytics.pluginUpdated(version = pluginVersion, successful = true)
             Log.i("Plugin updated to version $pluginVersion")
         }
         if (needToUpdateCompiler) {
             if (!downloadArtifact(dstDir, compilerUrl, COMPILER_FILE_NAME)) {
+                Analytics.compilerUpdated(version = compilerVersion, successful = false)
                 return
             }
             if (!unzipCompiler(dstDir)) {
                 return
             }
             markCompilerUpdated(dstDir, compilerVersion)
+            Analytics.compilerUpdated(version = compilerVersion, successful = true)
             Log.i("Compiler updated to version $compilerVersion")
         }
         markUpdatesChecked(dstDir)
@@ -106,6 +110,7 @@ object Updater {
                 }
             } else {
                 Log.i("Failed to check version info for $url:")
+                Analytics.checkVersionInfoFailed()
                 result.output.forEach(Log::i)
                 null
             }

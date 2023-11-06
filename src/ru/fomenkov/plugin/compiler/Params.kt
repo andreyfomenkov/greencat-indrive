@@ -10,16 +10,6 @@ object Params {
     val GRADLE_CACHE_MODULES_PATH = "$ROOT_GRADLE_CACHE_PATH/modules-2"
     val GRADLE_CACHE_TRANSFORMS_PATH = "$ROOT_GRADLE_CACHE_PATH/transforms-3"
 
-    // Compiler and plugins
-    private val KOTLIN_PLUGIN_PATH = "/Applications/Android Studio.app/Contents/plugins/Kotlin".noTilda() // TODO: download relaxed compiler
-    val KOTLINC = "$KOTLIN_PLUGIN_PATH/kotlinc/bin/kotlinc"
-    val PARCELIZE_PLUGIN_PATH = "$KOTLIN_PLUGIN_PATH/kotlinc/lib/parcelize-compiler.jar"
-    val KAPT_PLUGIN_PATH = "$KOTLIN_PLUGIN_PATH/kotlinc/lib/kotlin-annotation-processing.jar"
-    const val KAPT_CLASSES_DIR = "incrementalData"
-    const val KAPT_SOURCES_DIR = "incrementalData"
-    const val KAPT_INCREMENTAL_DATA_DIR = "incrementalData"
-    const val KAPT_STUBS_DIR = "stubs"
-
     // Build directories and data files
     const val GREENCAT_ROOT_PATH = "greencat"
     const val BUILD_PATH_FINAL = "$GREENCAT_ROOT_PATH/build/final"
@@ -28,6 +18,16 @@ object Params {
     const val DEX_PATCH_SOURCE_PATH = "$BUILD_DIRECTORY/classes.dex"
     const val BUILD_LOG_FILE_PATH = "$BUILD_DIRECTORY/build.log"
     const val METADATA_DIFF_FILE_NAME = "metadata.diff"
+
+    // Compiler and plugins
+    private const val KOTLIN_ROOT_PATH = GREENCAT_ROOT_PATH
+    const val KOTLINC = "$KOTLIN_ROOT_PATH/kotlinc/bin/kotlinc"
+    const val PARCELIZE_PLUGIN_PATH = "$KOTLIN_ROOT_PATH/kotlinc/lib/parcelize-compiler.jar"
+    const val KAPT_PLUGIN_PATH = "$KOTLIN_ROOT_PATH/kotlinc/lib/kotlin-annotation-processing.jar"
+    const val KAPT_CLASSES_DIR = "incrementalData"
+    const val KAPT_SOURCES_DIR = "incrementalData"
+    const val KAPT_INCREMENTAL_DATA_DIR = "incrementalData"
+    const val KAPT_STUBS_DIR = "stubs"
 
     // Android SDK and tools paths
     val ANDROID_SDK_ROOT_PATH = "~/Library/Android/sdk".noTilda()

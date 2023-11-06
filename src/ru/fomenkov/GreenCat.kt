@@ -121,8 +121,6 @@ class GreenCat(private val executor: WorkerTaskExecutor) {
         // Show details in case no supported source files found
         var isEmptyGitDiff = false
 
-        // TODO: build/final is not cleared + metadata
-
         if (supportedSourceFiles.isEmpty() && unknownSourceFiles.isEmpty()) {
             Log.d("\nNothing to compile. Please modify supported files to proceed")
             isEmptyGitDiff = true
@@ -306,7 +304,7 @@ class GreenCat(private val executor: WorkerTaskExecutor) {
             if (supportedFiles.isNotEmpty()) {
                 Log.i("")
             }
-            Log.i("Ignored files (not supported):")
+            Log.i("Ignored files (not supported or skipped):")
 
             unknownFiles.forEach { path -> Log.i(" - $path") }
         }

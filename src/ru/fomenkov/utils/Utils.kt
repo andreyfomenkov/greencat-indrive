@@ -19,6 +19,10 @@ object Utils {
 
     fun isSourceFileSupported(path: String): Boolean {
         with(path.trim()) {
+            // Unit tests are useless for patching + they can contain method names with spaces (not supported by ART)
+            if (contains("/src/test/java/") || contains("/src/test/kotlin/")) {
+                return false
+            }
             if (endsWith(".kt")) {
                 return true
             }
