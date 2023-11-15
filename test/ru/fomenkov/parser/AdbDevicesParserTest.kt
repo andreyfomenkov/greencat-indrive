@@ -12,7 +12,7 @@ class AdbDevicesParserTest {
             "",
         )
         assertEquals(
-            AdbDevicesParser.Result.NO_DEVICES,
+            AdbDevicesParser.Result.NoDevices,
             AdbDevicesParser(output).parse(),
         )
     }
@@ -25,7 +25,21 @@ class AdbDevicesParserTest {
             "",
         )
         assertEquals(
-            AdbDevicesParser.Result.SUCCESS,
+            AdbDevicesParser.Result.SingleDevice(serialId = "420051a5d6c3a465"),
+            AdbDevicesParser(output).parse(),
+        )
+    }
+
+    @Test
+    fun `Test one device connected and one offline output`() {
+        val output = listOf(
+            "List of devices attached",
+            "420051a5d6c3a465\tdevice",
+            "1234567890123456\toffline",
+            "",
+        )
+        assertEquals(
+            AdbDevicesParser.Result.SingleDevice(serialId = "420051a5d6c3a465"),
             AdbDevicesParser(output).parse(),
         )
     }
@@ -39,7 +53,7 @@ class AdbDevicesParserTest {
             "",
         )
         assertEquals(
-            AdbDevicesParser.Result.MULTIPLE_DEVICES,
+            AdbDevicesParser.Result.MultipleDevices,
             AdbDevicesParser(output).parse(),
         )
     }
@@ -52,7 +66,7 @@ class AdbDevicesParserTest {
             "",
         )
         assertEquals(
-            AdbDevicesParser.Result.NO_DEVICES,
+            AdbDevicesParser.Result.NoDevices,
             AdbDevicesParser(output).parse(),
         )
     }
@@ -65,7 +79,7 @@ class AdbDevicesParserTest {
             "",
         )
         assertEquals(
-            AdbDevicesParser.Result.NO_DEVICES,
+            AdbDevicesParser.Result.NoDevices,
             AdbDevicesParser(output).parse(),
         )
     }

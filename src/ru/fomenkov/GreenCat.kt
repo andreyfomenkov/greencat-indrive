@@ -154,7 +154,7 @@ class GreenCat(private val executor: WorkerTaskExecutor) {
         // Print diff details
         printSourcesDiff(branchName, supportedSourceFiles, compileSourcePaths.toList(), unknownSourceFiles)
 
-        // Check single Android device is connected
+        // Check single online Android device is connected
         checkAndroidDeviceConnected()
 
         // Compose destination DEX patch path
@@ -556,15 +556,22 @@ class GreenCat(private val executor: WorkerTaskExecutor) {
         check(File(Params.ADB_TOOL_PATH).exists()) { "ADB not found at: ${Params.ADB_TOOL_PATH}" }
         exec("export LANG=en_US; ${Params.ADB_TOOL_PATH} devices").let { result ->
             if (result.successful) {
-                when (AdbDevicesParser(result.output).parse()) {
-                    AdbDevicesParser.Result.SUCCESS -> Log.d("Android device found")
-                    AdbDevicesParser.Result.NO_DEVICES -> {
-                        Log.d("No devices connected")
-                        return@let
+                when (val parserResult = AdbDevicesParser(result.output).parse()) {
+                    is AdbDevicesParser.Result.SingleDevice -> {
+                        Log.d("Android device found, serial ID: ${parserResult.serialId}")
+                        Repository.Device.set(parserResult.serialId)
                     }
-                    AdbDevicesParser.Result.MULTIPLE_DEVICES -> {
-                        Log.d("Multiple devices connected")
-                        return@let
+                    AdbDevicesParser.Result.NoDevices -> {
+                        "No devices connected".let {
+                            Log.d(it)
+                            error(it)
+                        }
+                    }
+                    AdbDevicesParser.Result.MultipleDevices -> {
+                        "Multiple devices connected".let {
+                            Log.d(it)
+                            error(it)
+                        }
                     }
                 }
             } else {
@@ -587,7 +594,7 @@ class GreenCat(private val executor: WorkerTaskExecutor) {
     }
 
     private fun removePatchesOnDevice() {
-        exec("${Params.ADB_TOOL_PATH} shell rm -f '${Params.DEX_PATCH_DEST_PATH_PREFIX}*.dex'").let { result ->
+        exec("${Params.ADB_TOOL_PATH} -s ${Repository.Device.get()} shell rm -f '${Params.DEX_PATCH_DEST_PATH_PREFIX}*.dex'").let { result ->
             if (!result.successful) {
                 val message = "Failed to clean previous patch files on Android device:\n" +
                         result.output.joinToString(separator = "\n")
@@ -597,7 +604,7 @@ class GreenCat(private val executor: WorkerTaskExecutor) {
     }
 
     private fun pushPatchToDevice(destinationPath: String) {
-        exec("${Params.ADB_TOOL_PATH} push ${Params.DEX_PATCH_SOURCE_PATH} $destinationPath").let { result ->
+        exec("${Params.ADB_TOOL_PATH} -s ${Repository.Device.get()} push ${Params.DEX_PATCH_SOURCE_PATH} $destinationPath").let { result ->
             if (result.successful) {
                 Log.d("DEX patch successfully pushed to Android device")
             } else {
@@ -608,7 +615,7 @@ class GreenCat(private val executor: WorkerTaskExecutor) {
 
     private fun restartApp(packageName: String, componentName: String) {
         // Stop current process
-        exec("${Params.ADB_TOOL_PATH} shell am force-stop $packageName").let { result ->
+        exec("${Params.ADB_TOOL_PATH} -s ${Repository.Device.get()} shell am force-stop $packageName").let { result ->
             if (result.successful) {
                 Log.d("Force stop application: $packageName")
             } else {
@@ -617,7 +624,7 @@ class GreenCat(private val executor: WorkerTaskExecutor) {
         }
 
         // Start application
-        exec("${Params.ADB_TOOL_PATH} shell am start -n $packageName/$componentName -a android.intent.action.MAIN -c android.intent.category.LAUNCHER")
+        exec("${Params.ADB_TOOL_PATH} -s ${Repository.Device.get()} shell am start -n $packageName/$componentName -a android.intent.action.MAIN -c android.intent.category.LAUNCHER")
             .let { result ->
                 if (result.successful) {
                     Log.d("Starting $componentName")

@@ -121,6 +121,19 @@ object Repository {
         }
     }
 
+    object Device {
+        private var serialId: String = ""
+
+        fun set(serialId: String) {
+            this.serialId = serialId
+        }
+
+        fun get(): String {
+            check(serialId.isNotBlank()) { "No Android device serial ID set yet" }
+            return serialId
+        }
+    }
+
     /**
      * Used by Kotlin compiler for `-module-name` param
      */
