@@ -57,6 +57,7 @@ class KotlinCompiler(
             .param("-classpath", classpathStr)
             .param("-Xjvm-default=all-compatibility")
             .param("-Xuse-fast-jar-file-system")
+            .param("-jvm-target", Settings.JVM_TARGET)
             .param("-module-name", moduleNameParam)
             .withPlugins(plugins)
             .param(composeFriendModulesParam())
