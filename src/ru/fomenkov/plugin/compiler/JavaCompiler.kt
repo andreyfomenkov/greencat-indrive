@@ -23,6 +23,8 @@ class JavaCompiler(
         val classpathStr = classpath.joinToString(separator = ":")
         val cmd = CommandBuilder("javac")
             .param("-classpath", classpathStr)
+            .param("-source", Settings.JVM_TARGET)
+            .param("-target", Settings.JVM_TARGET)
             .param("-g")
             .param("-d", outputDir)
             .param(sources.joinToString(separator = " "))
