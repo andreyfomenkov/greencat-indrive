@@ -18,7 +18,7 @@ object CompilerModuleNameResolver {
                         file.isDirectory && !file.name.lowercase().contains("release") && !file.name.lowercase().contains("test")
                     }
                     ?.sortedByDescending(File::lastModified)
-                    ?.first()
+                    ?.firstOrNull()
 
                 if (dir != null) {
                     val parts = path.split('/')

@@ -49,14 +49,16 @@ class AndroidProjectIntegrationPlayground {
                 packageName = packageName,
                 componentName = componentName,
             )
-        } catch (_: Throwable) {
-            dumpLBuildLogs()
+        } catch (e: Throwable) {
+            println("Plugin failed: ${e.message}")
+            e.printStackTrace()
+            dumpBuildLogs()
         } finally {
             plugin.release()
         }
     }
 
-    private fun dumpLBuildLogs() {
+    private fun dumpBuildLogs() {
         val logs = Log.getDebugLogs().joinToString(separator = "\n")
         File(Params.BUILD_LOG_FILE_PATH).writeText(logs)
     }

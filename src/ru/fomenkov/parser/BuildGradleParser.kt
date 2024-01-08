@@ -20,7 +20,7 @@ class BuildGradleParser(private val path: String) {
         File(path).readLines()
             .map(String::trim)
             .forEach { line ->
-                if (inDepsBlock) {
+                if (inDepsBlock && !hasQuestionMark(line)) {
                     if (line.startsWith("project")) {
                         val str = line.replace(" ", "")
                             .replace('"', '\'')
@@ -52,6 +52,17 @@ class BuildGradleParser(private val path: String) {
             Log.v("No dependencies block found in $path")
         }
         return entities
+    }
+
+    private fun hasQuestionMark(line: String): Boolean { // For cases like "project (condition : ':m4' ? ':m5')"
+        val startIndex = line.indexOf('(')
+        val endIndex = line.indexOf(')')
+        val questionIndex = line.indexOf('?')
+
+        if (questionIndex == -1) {
+            return false
+        }
+        return startIndex != -1 && endIndex != -1 && questionIndex > startIndex && questionIndex < endIndex
     }
 
     private fun parseKtsFile(): Set<Dependency> {

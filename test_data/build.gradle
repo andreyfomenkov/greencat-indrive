@@ -26,6 +26,8 @@ dependencies {
             project(":m3:sub2 "),
             project("  :m3:sub3:sub4  "),
 
+            project(condition ? ":m4" : ":m5"), // TODO: can we add both in this case?
+
             libs.sample.lib1,
             libs.sample.lib2,
             libs.sample.lib3,
