@@ -38,7 +38,7 @@ class GitStatusParser(private val input: List<String>) {
 
                             if (file.exists()) {
                                 if (file.isDirectory) {
-                                    exec("find ${file.absolutePath} -name '*.*'").let { result ->
+                                    exec("find ${file.path} -name '*.*'").let { result ->
                                         if (result.successful) {
                                             paths += result.output
                                         } else {
