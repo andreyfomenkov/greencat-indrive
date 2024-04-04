@@ -1,0 +1,32 @@
+[
+  {
+    "name": "passenger",
+    "modules": [
+      ":passenger:main",
+      ":passenger:ui",
+      ":passenger:data"
+    ]
+  },
+  {
+    "name": "driver",
+    "modules": [
+      ":driver:main",
+      ":driver:ui",
+      ":driver:data"
+    ]
+  },
+  {
+    "name": "passenger_and_driver",
+    "include": [
+      "passenger",
+      "driver"
+    ],
+    "modules": [
+      ":app:main",
+      ":app:common"
+    ]
+  },
+  {
+    "name": "empty"
+  }
+]

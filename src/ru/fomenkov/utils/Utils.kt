@@ -73,6 +73,17 @@ object Utils {
         }
     }
 
+    fun formatSecToMinSec(timeSec: Long): String {
+        val min = timeSec / 60
+        val sec = timeSec % 60
+
+        return if (min > 0) {
+            "$min min $sec sec"
+        } else {
+            "$sec sec"
+        }
+    }
+
     fun printTextInFrame(text: String) {
         val vItem = '|'
         val hItem = '-'

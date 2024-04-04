@@ -7,9 +7,9 @@ object Log {
 
     private val debugLogsCollector = mutableListOf<String>()
 
-    fun i(message: String) {
+    fun i(message: String, newLine: Boolean = true) {
         if (level == Level.INFO || level == Level.DEBUG || level == Level.VERBOSE) {
-            println(message)
+            if (newLine) println(message) else print(message)
         }
     }
 

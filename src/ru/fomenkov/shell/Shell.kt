@@ -1,63 +1,82 @@
 package ru.fomenkov.shell
 
 import ru.fomenkov.utils.Log
+import java.io.BufferedReader
+import java.io.IOException
+import java.util.concurrent.Callable
+import java.util.concurrent.ExecutorService
+import java.util.concurrent.Executors
+import java.util.concurrent.Future
 
 object Shell {
 
-    data class Result(val output: List<String>, val successful: Boolean)
+    data class Result(
+        val output: List<String> = emptyList(),
+        val successful: Boolean,
+    )
 
     private const val SHELL = "/bin/zsh"
     private const val RESULT_PREFIX = "%RESULT="
 
-    @Synchronized
-    fun exec(cmd: String, print: Boolean = false): Result {
-        val output = execWithoutResult("$cmd; echo $RESULT_PREFIX$?", print)
+    fun exec(cmd: String, print: Boolean = false, onUpdate: (Process, String) -> Unit = { _, _ -> }): Result {
+        val executor = Executors.newFixedThreadPool(2)
 
-        return if (output == null) {
-            Result(output = emptyList(), successful = false)
-        } else {
-            val successful = output.firstOrNull { line ->
-                line.startsWith(RESULT_PREFIX)
-            }?.trim()?.endsWith("0") == true
-
+        return try {
+            val process = Runtime.getRuntime().exec(arrayOf(SHELL, "-c", "$cmd; echo $RESULT_PREFIX\$?"))
+            val inputReader = process.inputStream.bufferedReader()
+            val errorReader = process.errorStream.bufferedReader()
+            val inputResult = handleReaderStream(executor, inputReader, print) { line -> onUpdate(process, line) }.get()
+            val errorResult = handleReaderStream(executor, errorReader, print) { line -> onUpdate(process, line) }.get()
+            val output = inputResult.output + errorResult.output
+            val successful = inputResult.successful && errorResult.successful && isResultZero(output)
             Result(
-                output = output.filterNot { line -> line.startsWith(RESULT_PREFIX) },
-                successful = successful,
+                output.filterNot { line -> line.startsWith(RESULT_PREFIX) },
+                successful,
             )
+
+        } catch (e: Throwable) {
+            Log.i("Execution failed: ${e.message}")
+            Result(successful = false)
+
+        } finally {
+            if (!executor.isShutdown) {
+                executor.shutdownNow()
+            }
         }
     }
 
-    private fun execWithoutResult(cmd: String, print: Boolean = false): List<String>? {
-        try {
-            val output = mutableListOf<String>()
-            Runtime.getRuntime().exec(arrayOf(SHELL, "-c", cmd)).apply {
-                val inputReader = inputStream.bufferedReader()
-                val errorReader = errorStream.bufferedReader()
+    private fun isResultZero(output: List<String>): Boolean {
+        return output.firstOrNull { line ->
+            line.startsWith(RESULT_PREFIX)
+        }?.trim()?.endsWith("0") == true
+    }
 
-                when (print) {
-                    true -> {
-                        var line: String?
-                        do {
-                            line = errorReader.readLine() ?: break
-                            output += line
-                            Log.d(line)
-                        } while (line != null)
-                        do {
-                            line = inputReader.readLine() ?: break
-                            output += line
-                            Log.d(line)
-                        } while (line != null)
+    private fun handleReaderStream(
+        executor: ExecutorService,
+        reader: BufferedReader,
+        print: Boolean,
+        onUpdate: (String) -> Unit,
+    ): Future<Result> {
+        val task = Callable {
+            val output = mutableListOf<String>()
+            var successful = true
+
+            while (true) {
+                try {
+                    val line = reader.readLine() ?: break
+                    onUpdate(line)
+                    output += line
+
+                    if (print && !line.trim().startsWith(RESULT_PREFIX)) {
+                        Log.i(line)
                     }
-                    else -> {
-                        output += inputReader.readLines() + errorReader.readLines()
-                    }
+                } catch (e: IOException) {
+                    successful = false
+                    break
                 }
             }
-            return output
-
-        } catch (error: Throwable) {
-            Log.d("Failed to execute shell command: $cmd\nError: ${error.message}")
-            return null
+            Result(output, successful)
         }
+        return executor.submit(task)
     }
 }

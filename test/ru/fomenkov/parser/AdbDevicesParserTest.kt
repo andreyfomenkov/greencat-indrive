@@ -12,7 +12,7 @@ class AdbDevicesParserTest {
             "",
         )
         assertEquals(
-            AdbDevicesParser.Result.NoDevices,
+            emptyList<String>(),
             AdbDevicesParser(output).parse(),
         )
     }
@@ -25,7 +25,7 @@ class AdbDevicesParserTest {
             "",
         )
         assertEquals(
-            AdbDevicesParser.Result.SingleDevice(serialId = "420051a5d6c3a465"),
+            listOf("420051a5d6c3a465"),
             AdbDevicesParser(output).parse(),
         )
     }
@@ -39,7 +39,7 @@ class AdbDevicesParserTest {
             "",
         )
         assertEquals(
-            AdbDevicesParser.Result.SingleDevice(serialId = "420051a5d6c3a465"),
+            listOf("420051a5d6c3a465"),
             AdbDevicesParser(output).parse(),
         )
     }
@@ -53,7 +53,7 @@ class AdbDevicesParserTest {
             "",
         )
         assertEquals(
-            AdbDevicesParser.Result.MultipleDevices,
+            listOf("420051a5d6c3a465", "1234567890123456"),
             AdbDevicesParser(output).parse(),
         )
     }
@@ -66,7 +66,7 @@ class AdbDevicesParserTest {
             "",
         )
         assertEquals(
-            AdbDevicesParser.Result.NoDevices,
+            emptyList<String>(),
             AdbDevicesParser(output).parse(),
         )
     }
@@ -79,7 +79,7 @@ class AdbDevicesParserTest {
             "",
         )
         assertEquals(
-            AdbDevicesParser.Result.NoDevices,
+            emptyList<String>(),
             AdbDevicesParser(output).parse(),
         )
     }

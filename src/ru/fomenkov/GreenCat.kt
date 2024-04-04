@@ -1,630 +1,263 @@
 package ru.fomenkov
 
-import org.junit.Assert
 import ru.fomenkov.analytics.Analytics
-import ru.fomenkov.data.Dependency
-import ru.fomenkov.data.Module
-import ru.fomenkov.data.Repository
-import ru.fomenkov.data.Round
+import ru.fomenkov.data.*
 import ru.fomenkov.parser.*
-import ru.fomenkov.plugin.ArgumentsParser
-import ru.fomenkov.plugin.CompilationRoundsBuilder
-import ru.fomenkov.plugin.FinalBuildDirectoryCleaner
-import ru.fomenkov.plugin.IncrementalRunDiffer
-import ru.fomenkov.plugin.bytecode.ClassFileSignatureSupplier
-import ru.fomenkov.plugin.compiler.DexPatchCompiler
 import ru.fomenkov.plugin.compiler.Params
-import ru.fomenkov.plugin.strategy.CompilationStrategy
-import ru.fomenkov.plugin.strategy.CompilationStrategySelector
 import ru.fomenkov.shell.Shell.exec
-import ru.fomenkov.shell.ShellCommandsValidator
 import ru.fomenkov.utils.*
 import java.io.File
-import java.util.concurrent.Callable
+
+private const val CONFIG_JSON_PATH = "/Users/andreyfomenkov/config.json" // TODO: change
+private const val GRADLE_DAEMON_TIMEOUT = "10800000"
+private const val GRADLE_MODULE_NAME = "incremental-build"
+private const val KEEP_GRADLE_DAEMON_ALIVE = true
+private const val GIT_DIFF_SCOPE_CHECK_ENABLED = false // TODO: true for production
+private const val AGENT_ZIP_PATH = "/Users/andreyfomenkov/Workspace/inc/cc.tar.gz" // TODO: change
+private const val PACKAGE_NAME = "sinet.startup.inDriver"
+private const val COMPONENT_NAME = "sinet.startup.inDriver.ui.splash.SplashActivity"
 
 fun main(vararg args: String) {
-    Analytics.launch()
-    with(Settings) {
-        displayModuleDependencies = false
-        displayResolvingChildModules = false
-        displayKotlinCompilerModuleNames = false
-        useIncrementalDiff = true
-        usePlainCompilationStrategyOnly = false
+    try {
+        GreenCat().launch(*args)
+    } catch (e: Throwable) {
+        val message = e.localizedMessage
+        val title = "* * * EXECUTION ERROR * * *"
+        val line = "-".repeat(message.length)
+        val header = " ".repeat(message.length / 2 - title.length / 2) + title
+        Analytics.failed(message)
+
+        Log.i("\n$line")
+        Log.i(header)
+        Log.i("$line\n")
+        Log.i(message)
+        Log.i("\n$line")
     }
-    Log.level = Log.Level.INFO
-    ArgumentsParser(args.toList())
-        .parse()
-        ?.let { result ->
-            if (result.verboseLogging) {
-                Log.level = Log.Level.VERBOSE
-            }
-            val executor = WorkerTaskExecutor()
-            val plugin = GreenCat(executor)
-            try {
-                plugin.launch(
-                    classpath = result.classpath.split(':').toSet(),
-                    packageName = result.packageName,
-                    componentName = result.componentName,
-                )
-            } catch (error: Throwable) {
-                val logs = Log.getDebugLogs().joinToString(separator = "\n")
-                File(Params.BUILD_LOG_FILE_PATH).writeText(logs)
-                Utils.printTextInFrame(error.localizedMessage)
-            } finally {
-                plugin.release()
-            }
-        }
 }
 
-class GreenCat(private val executor: WorkerTaskExecutor) {
+internal class GreenCat {
 
-    fun launch(
-        classpath: Set<String>,
-        packageName: String,
-        componentName: String,
-    ) {
-        Repository.Classpath.set(filterClasspath(classpath))
-        val totalTimeStart = System.currentTimeMillis()
-
-        // Display plugin info
+    fun launch(vararg args: String) {
+        Analytics.launch()
+        Log.level = Log.Level.INFO
         Log.i("GreenCat v${Settings.GREENCAT_VERSION}")
-        Log.i("GitHub: https://github.com/andreyfomenkov/greencat-indrive\n")
+        Log.i("GitHub: https://github.com/andreyfomenkov/greencat-indrive")
 
-        // Check working directory
-        checkWorkingDirectory()
+        val config = selectInputConfiguration(*args)
+        val deviceId = selectAndroidDevice()
+        val timeStart = System.currentTimeMillis()
 
-        // Check application package and component name
-        checkAppPackageAndComponentName(packageName, componentName)
-
-        // Check shell commands
-        ShellCommandsValidator.validate()
-
-        // Recreate intermediate build directory
-        recreateIntermediateBuildDirectory()
-
-        // Create final build directory if it doesn't exist
-        createFinalBuildDirectory()
-
-        // Parse library versions
-        val libraryVersions = LibVersionsParser(Params.LIBRARY_VERSIONS_FILE_PATH).parse()
-        Repository.LibraryVersions.setup(libraryVersions)
-
-        // Parse settings.gradle file
-        val modules = parseSettingsGradleFile()
-
-        // Resolve module names for Kotlin compiler `-module-name` param
-        resolveModuleNamesForKotlinCompiler(modules)
-
-        // Check build.gradle or build.gradle.kts files exist for the declared modules
-        checkBuildGradleFilesExist(modules)
-
-        // Parse build.gradle files for declared modules
-        val deps = parseBuildGradleFiles(modules, executor)
-
-        // Setup dependency graph
-        setupDependencyGraph(deps)
-
-        // Display module dependencies
-        if (Settings.displayModuleDependencies) {
-            deps.forEach { (module, deps) ->
-                Log.d("Module: ${module.name}:")
-                deps.forEach { dep -> Log.d(" - $dep") }
-            }
+        if (GIT_DIFF_SCOPE_CHECK_ENABLED) {
+            checkGitDiffRequirements(config)
         }
+        checkAppOnDevice(PACKAGE_NAME, deviceId)
+        Log.i("Running configuration '${config.name}' on device '$deviceId'\n")
 
-        // Get project git diff files (see step [2] above)
-        val (branchName, gitDiffFiles) = getProjectGitDiffFiles()
+        build(config)
+        deploy(config, deviceId)
 
-        // Split supported and not supported source files
-        val (supportedSourceFiles, unknownSourceFiles) = gitDiffFiles.partition(Utils::isSourceFileSupported)
+        val timeEnd = System.currentTimeMillis()
+        val totalTimeSec = (timeEnd - timeStart) / 1000L
+        Analytics.complete(totalTimeSec)
 
-        // Show details in case no supported source files found
-        var isEmptyGitDiff = false
-
-        if (supportedSourceFiles.isEmpty() && unknownSourceFiles.isEmpty()) {
-            Log.d("\nNothing to compile. Please modify supported files to proceed")
-            isEmptyGitDiff = true
-
-        } else if (supportedSourceFiles.isEmpty()) {
-            unknownSourceFiles.forEach { path -> Log.d(" - (NOT SUPPORTED) $path") }
-            Log.d("\nNo supported source files to compile. Please modify supported files to proceed")
-            isEmptyGitDiff = true
-        }
-
-        // Analyze incremental diff
-        val (compileSourcePaths, removeSourcePaths) = if (supportedSourceFiles.isEmpty()) {
-            emptySet<String>() to emptySet()
-        } else {
-            analyzeIncrementalDiff(supportedSourceFiles, executor)
-        }
-
-        // Display details for the current incremental diff step
-        Log.d("# Incremental diff details #")
-        if (compileSourcePaths.isEmpty()) {
-            Log.d("[COMPILE] * nothing *")
-        } else {
-            compileSourcePaths.forEach { path -> Log.d("[COMPILE] $path") }
-        }
-        if (removeSourcePaths.isEmpty()) {
-            Log.d("[REMOVE] * nothing *")
-        } else {
-            removeSourcePaths.forEach { path -> Log.d("[REMOVE]  $path") }
-        }
-
-        // Print diff details
-        printSourcesDiff(branchName, supportedSourceFiles, compileSourcePaths.toList(), unknownSourceFiles)
-
-        // Check single online Android device is connected
-        checkAndroidDeviceConnected()
-
-        // Compose destination DEX patch path
-        val dstDexPatchPath = composePatchDestinationPath(packageName)
-
-        // Decide what to do in case nothing to compile
-        when {
-            isEmptyGitDiff -> {
-                Log.d("\n# Git diff is empty #")
-                Log.d(" - clear intermediate build directory")
-                Log.d(" - remove final build directory")
-                Log.d(" - remove patch on Android device")
-                Log.d(" - restart application")
-
-                recreateIntermediateBuildDirectory()
-                removeFinalBuildDirectory()
-                removePatchesOnDevice()
-                restartApp(packageName, componentName)
-
-                "No supported files to compile or diff is empty. Only *.kt sources are allowed".let {
-                    Utils.printTextInFrame(it)
-                    Analytics.drop(it)
-                }
-                dumpBuildLogs()
-                return
-            }
-            compileSourcePaths.isEmpty() && removeSourcePaths.isEmpty() -> {
-                Log.d("\n# Nothing to compile and remove since the last incremental run #")
-                Log.d(" - push existing patch if any to Android device")
-                Log.d(" - restart application")
-
-                if (File(Params.DEX_PATCH_SOURCE_PATH).exists()) {
-                    pushPatchToDevice(dstDexPatchPath)
-                }
-                restartApp(packageName, componentName)
-
-                "Everything is up to date since the last incremental run".let {
-                    Utils.printTextInFrame(it)
-                    Analytics.drop(it)
-                }
-                dumpBuildLogs()
-                return
-            }
-            compileSourcePaths.isEmpty() -> {
-                Log.d("\n# Nothing to compile, but some sources are removed #")
-                Log.d(" - clear final build directory from removed classes")
-                Log.d(" - recompile DEX patch")
-                Log.d(" - push patch to Android device")
-                Log.d(" - restart application")
-
-                cleanupFinalBuildDirectory(removeSourcePaths)
-                buildDexPatch()
-                pushPatchToDevice(dstDexPatchPath)
-                restartApp(packageName, componentName)
-
-                printPatchSize()
-                val duration = printTotalTimeSpent(totalTimeStart)
-                Analytics.complete(duration)
-                dumpBuildLogs()
-                return
-            }
-        }
-
-        // Cleanup unnecessary .class files in the final build directory
-        cleanupFinalBuildDirectory(removeSourcePaths)
-
-        // Compose compilation rounds
-        val rounds = composeCompilationRounds(compileSourcePaths)
-        Log.i("Building patch...")
-
-        // Perform compilation for all rounds
-        compileRounds(rounds).let { result ->
-            if (result is CompilationStrategy.Result.Failed) {
-                Log.d("\n# Compilation failed #")
-                Log.d(" - clear intermediate build directory")
-                Log.d(" - remove final build directory")
-                Log.d("")
-
-                result.output.forEach(Log::d)
-                recreateIntermediateBuildDirectory()
-                removeFinalBuildDirectory()
-
-                if (Log.level == Log.Level.INFO) {
-                    Log.printDebugLogs()
-                }
-                Log.i("")
-                Utils.printTextInFrame("Compilation failed")
-                Analytics.failed("Compilation failed")
-                dumpBuildLogs()
-                return
-            }
-        }
-
-        // Add Greencat signature for all generated .class files
-        addGreenCatSignatures()
-
-        // Recursively copy intermediate .class files to the final build directory
-        copyIntermediateClassesToFinalBuildDirectory()
-
-        // Build DEX patch
-        buildDexPatch()
-
-        // Check single Android device is connected
-        checkAndroidDeviceConnected()
-
-        // Remove previous patch files on Android device
-        removePatchesOnDevice()
-
-        // Push DEX patch
-        pushPatchToDevice(dstDexPatchPath)
-
-        // Restart app
-        restartApp(packageName, componentName)
-
-        // Dump build logs
-        dumpBuildLogs()
-
-        // Total time and patch size output
-        printPatchSize()
-        val duration = printTotalTimeSpent(totalTimeStart)
-        Analytics.complete(duration)
+        Log.i("")
+        val formattedTime = Utils.formatSecToMinSec(totalTimeSec)
+        Utils.printTextInFrame("Build & deploy complete in $formattedTime")
     }
 
-    private fun dumpBuildLogs() {
-        val logs = Log.getDebugLogs().joinToString(separator = "\n")
-        File(Params.BUILD_LOG_FILE_PATH).writeText(logs)
+    private fun selectInputConfiguration(vararg args: String): Configuration {
+        val configs = JsonConfigParser(CONFIG_JSON_PATH)
+            .parse()
+            .associateBy(Configuration::name)
+
+        check(configs.isNotEmpty()) { "JSON config file is empty" }
+        var configName = args.getOrNull(0)
+
+        if (configName == null) {
+            Log.i("\nSelect configuration:")
+            val entries = configs.entries.toList()
+
+            entries.forEachIndexed { index, entry ->
+                Log.i(" $index -> ${entry.key}")
+            }
+            Log.i("\nEnter: ", newLine = false)
+            val index = checkNotNull(readln().toIntOrNull()) { "Invalid input value" }
+            configName = checkNotNull(entries.getOrNull(index)?.key) { "Input value out of bounds [0..${entries.size - 1}]" }
+        }
+        return checkNotNull(configs[configName]) { "No configuration found: $configName" }
     }
 
-    private fun printSourcesDiff(
-        branchName: String,
-        supportedFiles: List<String>,
-        compiledFiles: List<String>,
-        unknownFiles: List<String>,
-    ) {
-        if (supportedFiles.isNotEmpty()) {
-            Log.i("Source files to compile on branch `$branchName`:")
+    private fun selectAndroidDevice(): String {
+        check(File(Params.ADB_TOOL_PATH).exists()) { "ADB not found at: ${Params.ADB_TOOL_PATH}" }
+        exec("export LANG=en_US; ${Params.ADB_TOOL_PATH} devices").let { result ->
+            if (result.successful) {
+                val deviceIds = AdbDevicesParser(result.output).parse()
+                check(deviceIds.isNotEmpty()) { "No online Android devices connected" }
 
-            supportedFiles.forEach { path ->
-                if (path in compiledFiles) {
-                    Log.i(" - [*] $path")
+                return if (deviceIds.size == 1) {
+                    deviceIds.first()
                 } else {
-                    Log.i(" - [ ] $path")
+                    Log.i("\nSelect Android device:")
+
+                    deviceIds.forEachIndexed { index, deviceId ->
+                        Log.i(" $index -> $deviceId")
+                    }
+                    Log.i("\nEnter: ", newLine = false)
+                    val index = checkNotNull(readln().toIntOrNull()) { "Invalid input value" }
+                    return checkNotNull(deviceIds.getOrNull(index)) { "Input value out of bounds [0..${deviceIds.size - 1}]" }
                 }
-            }
-        }
-        if (unknownFiles.isNotEmpty()) {
-            if (supportedFiles.isNotEmpty()) {
-                Log.i("")
-            }
-            Log.i("Ignored files (not supported or skipped):")
-
-            unknownFiles.forEach { path -> Log.i(" - $path") }
-        }
-        if (supportedFiles.isNotEmpty() || unknownFiles.isNotEmpty()) {
-            Log.i("")
-        }
-    }
-
-    private fun printPatchSize() {
-        val dexFile = File(Params.DEX_PATCH_SOURCE_PATH)
-        check(dexFile.exists()) { "No DEX file found: ${Params.DEX_PATCH_SOURCE_PATH}" }
-
-        val patchSizeKb = dexFile.length() / 1024
-        Log.i("Patch size: $patchSizeKb KB\n")
-    }
-
-    private fun printTotalTimeSpent(totalTimeStart: Long): Long {
-        val totalTimeSec = (System.currentTimeMillis() - totalTimeStart) / 1000
-        Utils.printTextInFrame("Build & deploy complete in $totalTimeSec sec")
-        return totalTimeSec
-    }
-
-    private fun filterClasspath(classpath: Set<String>) =
-        classpath
-            .filterNot { path -> path.endsWith(".xml") || path.endsWith("/res") }
-            .filter { path -> File(path).exists() }
-            .toSet()
-
-    private fun checkWorkingDirectory() {
-        Log.d("Current working directory: ${File("").absolutePath}")
-        Assert.assertTrue(
-            "No settings.gradle file found. Incorrect working directory?",
-            File(Settings.SETTINGS_GRADLE_FILE_NAME).exists()
-        )
-    }
-
-    private fun checkAppPackageAndComponentName(packageName: String, componentName: String) {
-        assert(packageName.isNotBlank()) { "No package name provided. Add PACKAGE_NAME env variable to run configuration" }
-        assert(componentName.isNotBlank()) { "No component name provided. Add COMPONENT_NAME env variable to run configuration" }
-    }
-
-    private fun recreateIntermediateBuildDirectory() {
-        exec("rm -rf ${Params.BUILD_PATH_INTERMEDIATE}; mkdir -p ${Params.BUILD_PATH_INTERMEDIATE}")
-    }
-
-    private fun removeFinalBuildDirectory() {
-        exec("rm -rf ${Params.BUILD_PATH_FINAL}")
-    }
-
-    private fun createFinalBuildDirectory() {
-        exec("mkdir -p ${Params.BUILD_PATH_FINAL}")
-    }
-
-    private fun parseSettingsGradleFile(): Set<Module> {
-        val modules = timeMsec("Parsing settings.gradle") {
-            SettingsGradleParser(Settings.SETTINGS_GRADLE_FILE_NAME).parse()
-        }
-        Repository.Modules.setup(modules)
-        Assert.assertTrue("No Gradle modules parsed", modules.isNotEmpty())
-        return modules
-    }
-
-    private fun resolveModuleNamesForKotlinCompiler(modules: Set<Module>) {
-        Log.v(Settings.displayKotlinCompilerModuleNames, "[Kotlin compiler module names]")
-        modules.forEach { module ->
-            val paths = CompilerModuleNameResolver.getPossibleBuildPaths(module)
-            val name = CompilerModuleNameResolver.resolve(paths)
-
-            if (name.isBlank()) {
-                Log.v(Settings.displayKotlinCompilerModuleNames, "????????? -> [${module.name}]")
             } else {
-                Log.v(Settings.displayKotlinCompilerModuleNames, "$name -> [${module.name}]")
-            }
-            Repository.CompilerModuleNameParam.set(module, name)
-        }
-    }
-
-    private fun checkBuildGradleFilesExist(modules: Set<Module>) {
-        modules.forEach { module ->
-            val buildGradlePath = module.path + "/${Settings.BUILD_GRADLE_FILE}"
-            val buildGradleKtsPath = module.path + "/${Settings.BUILD_GRADLE_KTS_FILE}"
-            val buildFileExists = File(buildGradlePath).exists() || File(buildGradleKtsPath).exists()
-
-            if (!buildFileExists) {
-                Log.d("[WARNING] Module ${module.path} has no build file")
+                error("Failed to list Android devices via adb")
             }
         }
     }
 
-    private fun parseBuildGradleFiles(
-        modules: Set<Module>,
-        executor: WorkerTaskExecutor,
-    ): List<Pair<Module, Set<Dependency>>> {
-        val deps = timeMsec("Parse build.gradle files for declared modules") {
-            modules.map { module ->
-                Callable {
-                    val buildGradlePath = module.path + "/${Settings.BUILD_GRADLE_FILE}"
-                    val buildGradleKtsPath = module.path + "/${Settings.BUILD_GRADLE_KTS_FILE}"
-                    val buildFilePath = when {
-                        File(buildGradlePath).exists() -> buildGradlePath
-                        File(buildGradleKtsPath).exists() -> buildGradleKtsPath
-                        else -> null
-                    }
-                    val deps = if (buildFilePath == null) {
-                        emptySet()
-                    } else {
-                        BuildGradleParser(buildFilePath).parse()
-                    }
-                    module to deps
+    private fun checkAppOnDevice(packageName: String, deviceId: String) {
+        exec("${Params.ADB_TOOL_PATH} -s $deviceId shell pm list packages | grep $packageName").let { result ->
+            if (!result.successful || result.output.isEmpty()) {
+                check(result.output.isNotEmpty()) { "Application $packageName is not installed on device '$deviceId'" }
+            }
+        }
+    }
+
+    private fun checkGitDiffRequirements(config: Configuration) {
+        val (branch, paths) = getProjectGitDiffFiles()
+        val filePaths = paths
+            .filterNot { path -> path.startsWith(GRADLE_MODULE_NAME) }
+        val modulePaths = config.modules
+            .map { path ->
+                path.split(':')
+                    .filterNot(String::isBlank)
+                    .joinToString(separator = "/")
+            }
+        val unscopedPaths = filePaths.filterNot { filePath -> isFileInScope(filePath, modulePaths) }
+
+        if (unscopedPaths.isNotEmpty()) {
+            Log.i("\nWarning! You can add, modify or delete files only inside modules specified by '${config.name}' configuration:")
+            config.modules.forEach { moduleName -> Log.i(" - $moduleName") }
+
+            Log.i("\n The following file(s) on branch '$branch' are out of selected configuration scope:")
+            unscopedPaths.forEach { filePath -> Log.i(" - $filePath") }
+
+            error("Some file(s) are out of configuration scope. See the detailed message above")
+        }
+    }
+
+    private fun isFileInScope(filePath: String, modulePaths: List<String>): Boolean {
+        modulePaths.forEach { modulePath ->
+            if (filePath.startsWith(modulePath)) {
+                return true
+            }
+        }
+        return false
+    }
+
+    private fun build(config: Configuration) {
+        val modulesParam = config.modules.joinToString(separator = ",")
+        val cmd = StringBuilder("./gradlew ")
+            .append("-Dorg.gradle.daemon=$KEEP_GRADLE_DAEMON_ALIVE ")
+            .append("-Dorg.gradle.daemon.idletimeout=$GRADLE_DAEMON_TIMEOUT ")
+            .append("--console=plain ")
+            .append("-Pmodules=$modulesParam ")
+            .append(":$GRADLE_MODULE_NAME:assembleDebug")
+            .toString()
+
+        var needCleanAndRebuild = false
+        var result = exec(cmd, print = true) { _, line ->
+            if (line.contains("Unexpected combination of states")) {
+                needCleanAndRebuild = true
+            }
+        }
+        if (needCleanAndRebuild) {
+            Log.i("\n--------------------------------------")
+            Log.i("[!] Need to make clean and rebuild [!]")
+            Log.i("--------------------------------------\n")
+            result = exec("pkill java; ./gradlew clean; $cmd", print = true)
+        }
+        if (!result.successful) {
+            error("Build failed")
+        }
+    }
+
+    private fun deploy(config: Configuration, deviceId: String) {
+        val dexList = config.modules
+            .map { moduleName ->
+                val path = findClassesDex(moduleName)
+                checkNotNull(path) { "No classes.dex found for module $moduleName" }
+            }
+        dexList.forEachIndexed { index, path ->
+            exec("${Params.ADB_TOOL_PATH} -s $deviceId push $path /data/local/tmp/classes$index.dex").let { result ->
+                if (!result.successful) {
+                    error("Failed to push $path on device")
                 }
-            }.run { executor.run(this) }
+            }
         }
-        Assert.assertTrue("No modules and dependencies", deps.isNotEmpty())
-        return deps
+        exec("${Params.ADB_TOOL_PATH} -s $deviceId push $AGENT_ZIP_PATH /data/local/tmp").let { result ->
+            if (result.successful) {
+                Log.d("Push agent complete")
+            } else {
+                error("Failed to push agent on device")
+            }
+        }
+        StringBuilder("cat << EOF | ${Params.ADB_TOOL_PATH} -s $deviceId shell\n")
+            .append("run-as sinet.startup.inDriver\n")
+            .append("rm -rf code_cache\n")
+            .append("tar zxf /data/local/tmp/cc.tar.gz -C .\n")
+            .apply {
+                dexList.indices.forEach { index ->
+                    append("cp /data/local/tmp/classes$index.dex code_cache/.overlay/base.apk\n")
+                }
+            }
+            .append("EOF\n")
+            .toString()
+            .let { cmd ->
+                exec(cmd).let { result ->
+                    result.output.forEach(::println)
+
+                    if (result.successful) {
+                        Log.d("Deploy agent complete")
+                    } else {
+                        error("Failed to deploy agent on device")
+                    }
+                }
+            }
+        restartApp(deviceId = deviceId, packageName = PACKAGE_NAME, componentName = COMPONENT_NAME)
     }
 
-    private fun setupDependencyGraph(deps: List<Pair<Module, Set<Dependency>>>) {
-        val graph = deps.associate { (module, deps) -> module to deps }
-        Repository.Graph.setup(graph)
+    private fun findClassesDex(moduleName: String): String? {
+        val transformDir = moduleName.split(':')
+            .filterNot(String::isBlank)
+            .joinToString(separator = "/")
+            .let { path -> File("$path/build/.transforms") }
+
+        if (!transformDir.exists()) {
+            return null
+        }
+        transformDir.list()?.forEach { hash ->
+            val dexFile = File("${transformDir.path}/$hash/transformed/classes/classes_dex/classes.dex")
+
+            if (dexFile.exists()) {
+                return dexFile.absolutePath
+            }
+        }
+        return null
     }
 
     private fun getProjectGitDiffFiles(): Pair<String, Set<String>> {
         val (gitDiffOutput) = exec("export LANG=en_US; git status")
         val dirtySourcesResult = GitStatusParser(gitDiffOutput).parse()
-        Log.d("Current branch name: ${dirtySourcesResult.branch}\n")
         return dirtySourcesResult.branch to dirtySourcesResult.files
     }
 
-    private fun analyzeIncrementalDiff(
-        supportedSourceFiles: List<String>,
-        executor: WorkerTaskExecutor,
-    ) = IncrementalRunDiffer(
-        executor = executor,
-        intermediateBuildPath = Params.BUILD_PATH_INTERMEDIATE,
-        finalBuildPath = Params.BUILD_PATH_FINAL,
-    )
-        .run(supportedSourceFiles.toSet())
-        .let { (compileSourcePaths, removeSourcePaths) ->
-            if (Settings.useIncrementalDiff) {
-                Log.d("Incremental diff is enabled\n")
-                compileSourcePaths to removeSourcePaths
-            } else {
-                Log.d("Incremental diff is disabled\n")
-                supportedSourceFiles to removeSourcePaths
-            }
-        }
-
-    private fun composeCompilationRounds(compileSourcePaths: Collection<String>): List<Round> {
-        check(compileSourcePaths.isNotEmpty()) { "No source paths to compile" }
-        val rounds = CompilationRoundsBuilder(compileSourcePaths.toSet()).build()
-
-        rounds.forEachIndexed { index, round ->
-            Log.d("\nRound ${index + 1}:")
-
-            round.items.entries.forEach { (module, sourcePaths) ->
-                sourcePaths.forEach { path ->
-                    Log.d(" - [${module.name}] $path")
-                }
-            }
-        }
-        Log.d("")
-        return rounds
-    }
-
-    private fun compileRounds(rounds: List<Round>): CompilationStrategy.Result {
-        val compileTimeStart = System.currentTimeMillis()
-
-        rounds.forEachIndexed { index, round ->
-            val strategy = CompilationStrategySelector.select(round)
-            Log.d("Compilation round ${index + 1} -> using ${strategy.javaClass.simpleName}")
-            val result = strategy.perform(round)
-
-            if (result is CompilationStrategy.Result.Failed) {
-                return result
-            }
-        }
-        val compileTimeEnd = System.currentTimeMillis()
-
-        Log.d("Compilation time: ${(compileTimeEnd - compileTimeStart) / 1000} sec")
-        return CompilationStrategy.Result.OK
-    }
-
-    private fun addGreenCatSignatures() {
-        val signatureTimeStart = System.currentTimeMillis()
-        var classFilesCount = 0
-
-        exec("find ${Params.BUILD_PATH_INTERMEDIATE} -name '*.class'").let { result ->
-            if (result.successful) {
-                check(result.output.isNotEmpty()) { "No .class files found" }
-                classFilesCount = result.output.size
-
-                result.output.forEach { path ->
-                    if (!ClassFileSignatureSupplier.run(path, path)) {
-                        error("Failed to add signature into file: $path")
-                    }
-                }
-            } else {
-                error("Failed to list all .class files in ${Params.BUILD_PATH_INTERMEDIATE} directory")
-            }
-        }
-        val signatureTimeEnd = System.currentTimeMillis()
-        Log.d("\n$classFilesCount signature(s) were added in ${signatureTimeEnd - signatureTimeStart} ms")
-    }
-
-    private fun copyIntermediateClassesToFinalBuildDirectory() {
-        // Slash symbol is important!
-        check(
-            exec("cp -r ${Params.BUILD_PATH_INTERMEDIATE}/ ${Params.BUILD_PATH_FINAL}/").successful
-        ) { "Failed to copy intermediate build directory into final" }
-    }
-
-    private fun cleanupFinalBuildDirectory(removeSourcePaths: Set<String>) {
-        FinalBuildDirectoryCleaner(finalBuildPath = Params.BUILD_PATH_FINAL)
-            .clean(removeSourcePaths)
-            .let { paths ->
-                if (paths.isNotEmpty()) {
-                    Log.d("\n# Class files removed from ${Params.BUILD_PATH_FINAL} #")
-                    paths.forEach(Log::d)
-                }
-            }
-    }
-
-    private fun buildDexPatch() {
-        exec("find ${Params.BUILD_PATH_FINAL} -name '*.class'").let { result ->
-            if (result.successful) {
-                Log.d("# Class entries included into patch #")
-                val paths = result.output.toSet()
-                check(paths.isNotEmpty()) { "No .class files found at ${Params.BUILD_PATH_FINAL}" }
-
-                // Debug output for all class entries included into patch
-                Utils.composeClassEntries(paths).forEach(Log::d)
-                Log.d("")
-                val dexingTimeStart = System.currentTimeMillis()
-
-                if (!DexPatchCompiler.run(paths)) {
-                    Log.d("")
-                    DexPatchCompiler.output().forEach(Log::d)
-                    error("Failed to create DEX patch")
-                }
-                val dexingTimeEnd = System.currentTimeMillis()
-                Log.d("Creating DEX patch finished in ${dexingTimeEnd - dexingTimeStart} ms")
-            } else {
-                error("Failed to list all .class files in ${Params.BUILD_PATH_FINAL} directory")
-            }
-        }
-    }
-
-    private fun checkAndroidDeviceConnected() {
-        check(File(Params.ADB_TOOL_PATH).exists()) { "ADB not found at: ${Params.ADB_TOOL_PATH}" }
-        exec("export LANG=en_US; ${Params.ADB_TOOL_PATH} devices").let { result ->
-            if (result.successful) {
-                when (val parserResult = AdbDevicesParser(result.output).parse()) {
-                    is AdbDevicesParser.Result.SingleDevice -> {
-                        Log.d("Android device found, serial ID: ${parserResult.serialId}")
-                        Repository.Device.set(parserResult.serialId)
-                    }
-                    AdbDevicesParser.Result.NoDevices -> {
-                        "No devices connected".let {
-                            Log.d(it)
-                            error(it)
-                        }
-                    }
-                    AdbDevicesParser.Result.MultipleDevices -> {
-                        "Multiple devices connected".let {
-                            Log.d(it)
-                            error(it)
-                        }
-                    }
-                }
-            } else {
-                error("Failed to get Android devices via adb")
-            }
-        }
-    }
-
-    private fun composePatchDestinationPath(packageName: String): String {
-        // Get application last modified timestamp
-        val lastUpdateTimestamp = AppLastModifiedTimestampResolver.resolve(packageName)
-        Log.d("Package: $packageName, last updated timestamp: $lastUpdateTimestamp")
-
-        // Compose destination DEX patch path
-        "${Params.DEX_PATCH_DEST_PATH_PREFIX}${lastUpdateTimestamp}000.dex"
-
-        return "${Params.DEX_PATCH_DEST_PATH_PREFIX}${lastUpdateTimestamp}000.dex".also { path ->
-            Log.d("Patch output path: $path")
-        }
-    }
-
-    private fun removePatchesOnDevice() {
-        exec("${Params.ADB_TOOL_PATH} -s ${Repository.Device.get()} shell rm -f '${Params.DEX_PATCH_DEST_PATH_PREFIX}*.dex'").let { result ->
-            if (!result.successful) {
-                val message = "Failed to clean previous patch files on Android device:\n" +
-                        result.output.joinToString(separator = "\n")
-                error(message)
-            }
-        }
-    }
-
-    private fun pushPatchToDevice(destinationPath: String) {
-        exec("${Params.ADB_TOOL_PATH} -s ${Repository.Device.get()} push ${Params.DEX_PATCH_SOURCE_PATH} $destinationPath").let { result ->
-            if (result.successful) {
-                Log.d("DEX patch successfully pushed to Android device")
-            } else {
-                error("Failed to push DEX patch to Android device")
-            }
-        }
-    }
-
-    private fun restartApp(packageName: String, componentName: String) {
-        // Stop current process
-        exec("${Params.ADB_TOOL_PATH} -s ${Repository.Device.get()} shell am force-stop $packageName").let { result ->
+    private fun restartApp(deviceId: String, packageName: String, componentName: String) {
+        exec("${Params.ADB_TOOL_PATH} -s $deviceId shell am force-stop $packageName").let { result ->
             if (result.successful) {
                 Log.d("Force stop application: $packageName")
             } else {
                 error("Failed to stop process")
             }
         }
-
-        // Start application
-        exec("${Params.ADB_TOOL_PATH} -s ${Repository.Device.get()} shell am start -n $packageName/$componentName -a android.intent.action.MAIN -c android.intent.category.LAUNCHER")
+        exec("${Params.ADB_TOOL_PATH} -s $deviceId shell am start -n $packageName/$componentName -a android.intent.action.MAIN -c android.intent.category.LAUNCHER")
             .let { result ->
                 if (result.successful) {
                     Log.d("Starting $componentName")
@@ -632,18 +265,5 @@ class GreenCat(private val executor: WorkerTaskExecutor) {
                     error("Failed to start Activity: $componentName")
                 }
             }
-    }
-
-    private fun<T> timeMsec(step: String, action: () -> T): T {
-        val start = System.currentTimeMillis()
-        val result = action()
-        val end = System.currentTimeMillis()
-
-        Log.d("# $step: ${end - start} msec\n")
-        return result
-    }
-
-    fun release() {
-        executor.release()
     }
 }
