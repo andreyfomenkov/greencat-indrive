@@ -9,12 +9,14 @@ import ru.fomenkov.utils.*
 import java.io.File
 import kotlin.math.max
 
-private const val CONFIG_JSON_PATH = "config.json"
+private const val BASE_PATH = "tools/greencat"
+private const val CONFIG_JSON_PATH = "$BASE_PATH/config.json"
 private const val GRADLE_DAEMON_TIMEOUT = "10800000"
 private const val GRADLE_MODULE_NAME = "incremental-build"
 private const val KEEP_GRADLE_DAEMON_ALIVE = true
 private const val GIT_DIFF_SCOPE_CHECK_ENABLED = true
 private const val AGENT_ZIP_NAME = "agent.tar.gz"
+private const val AGENT_ZIP_PATH = "$BASE_PATH/$AGENT_ZIP_NAME"
 private const val PACKAGE_NAME = "sinet.startup.inDriver"
 private const val COMPONENT_NAME = "sinet.startup.inDriver.ui.splash.SplashActivity"
 private const val MIN_ANDROID_API_LEVEL = 26 // Android 8.0
@@ -261,7 +263,7 @@ internal class GreenCat {
             }
         }
         // Push zipped agent to /data/local/tmp
-        exec("${Params.ADB_TOOL_PATH} -s $deviceId push $AGENT_ZIP_NAME /data/local/tmp").let { result ->
+        exec("${Params.ADB_TOOL_PATH} -s $deviceId push $AGENT_ZIP_PATH /data/local/tmp").let { result ->
             if (result.successful) {
                 Log.d("Push agent complete")
             } else {
