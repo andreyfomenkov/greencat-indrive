@@ -18,45 +18,29 @@ object Analytics {
         deliver(Event.Launch)
     }
 
-    fun complete(duration: Long) {
-        deliver(Event.Complete, Key.Duration to duration)
+    fun complete(duration: Long, needCleanAndRebuild: Boolean) {
+        deliver(Event.Complete, Key.Duration to duration, Key.Clean to needCleanAndRebuild)
     }
 
     fun failed(message: String) {
         deliver(Event.Failed, Key.Message to message)
     }
 
-    fun drop(message: String) {
-        deliver(Event.Drop, Key.Message to message)
-    }
-
-    fun checkVersionInfoFailed() {
-        deliver(Event.CheckVersionInfoFailed)
-    }
-
-    fun pluginUpdated(version: String, successful: Boolean) {
-        deliver(Event.UpdatePlugin, Key.Version to version, Key.Successful to successful)
-    }
-
-    fun compilerUpdated(version: String, successful: Boolean) {
-        deliver(Event.UpdateCompiler, Key.Version to version, Key.Successful to successful)
+    fun cleanup() {
+        deliver(Event.Cleanup)
     }
 
     private sealed class Event(val name: String) {
         data object Launch : Event("launch")
         data object Complete : Event("complete")
         data object Failed : Event("failed")
-        data object Drop : Event("drop")
-        data object CheckVersionInfoFailed : Event("check_version_info_failed")
-        data object UpdatePlugin : Event("update_plugin")
-        data object UpdateCompiler : Event("update_compiler")
+        data object Cleanup : Event("cleanup")
     }
 
     private sealed class Key(val name: String) {
         data object Duration : Key("duration")
         data object Message : Key("message")
-        data object Version : Key("version")
-        data object Successful : Key("successful")
+        data object Clean : Key("clean")
     }
 
     private fun deliver(event: Event, vararg props: Pair<Key, Any>) {

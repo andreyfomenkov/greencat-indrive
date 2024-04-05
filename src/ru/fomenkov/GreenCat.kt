@@ -7,15 +7,17 @@ import ru.fomenkov.plugin.compiler.Params
 import ru.fomenkov.shell.Shell.exec
 import ru.fomenkov.utils.*
 import java.io.File
+import kotlin.math.max
 
-private const val CONFIG_JSON_PATH = "/Users/andreyfomenkov/config.json" // TODO: change
+private const val CONFIG_JSON_PATH = "config.json"
 private const val GRADLE_DAEMON_TIMEOUT = "10800000"
 private const val GRADLE_MODULE_NAME = "incremental-build"
 private const val KEEP_GRADLE_DAEMON_ALIVE = true
-private const val GIT_DIFF_SCOPE_CHECK_ENABLED = false // TODO: true for production
-private const val AGENT_ZIP_PATH = "/Users/andreyfomenkov/Workspace/inc/cc.tar.gz" // TODO: change
+private const val GIT_DIFF_SCOPE_CHECK_ENABLED = true
+private const val AGENT_ZIP_NAME = "cc.tar.gz"
 private const val PACKAGE_NAME = "sinet.startup.inDriver"
 private const val COMPONENT_NAME = "sinet.startup.inDriver.ui.splash.SplashActivity"
+private const val MIN_ANDROID_API_LEVEL = 26 // Android 8.0
 
 fun main(vararg args: String) {
     try {
@@ -23,8 +25,8 @@ fun main(vararg args: String) {
     } catch (e: Throwable) {
         val message = e.localizedMessage
         val title = "* * * EXECUTION ERROR * * *"
-        val line = "-".repeat(message.length)
-        val header = " ".repeat(message.length / 2 - title.length / 2) + title
+        val line = "-".repeat(max(title.length, message.length))
+        val header = " ".repeat(max(0, message.length / 2 - title.length / 2)) + title
         Analytics.failed(message)
 
         Log.i("\n$line")
@@ -44,6 +46,10 @@ internal class GreenCat {
         Log.i("GitHub: https://github.com/andreyfomenkov/greencat-indrive")
 
         val config = selectInputConfiguration(*args)
+        if (config == null) {
+            cleanup()
+            return
+        }
         val deviceId = selectAndroidDevice()
         val timeStart = System.currentTimeMillis()
 
@@ -51,40 +57,99 @@ internal class GreenCat {
             checkGitDiffRequirements(config)
         }
         checkAppOnDevice(PACKAGE_NAME, deviceId)
-        Log.i("Running configuration '${config.name}' on device '$deviceId'\n")
 
-        build(config)
+        val osVersion = getAndroidOSVersion(deviceId)
+        val apiLevel = getAndroidApiLevel(deviceId)
+
+        if (apiLevel < MIN_ANDROID_API_LEVEL) {
+            error("The ART Tooling Interface is supported in Android 8.0 and higher. Your device '$deviceId' with Android $osVersion is too old for this shit")
+        }
+        Log.i("Running configuration '${config.name}' on device '$deviceId' (Android $osVersion, API $apiLevel)\n")
+
+        val needCleanAndRebuild = build(config)
+        Log.i("Deploying patch files...")
         deploy(config, deviceId)
 
         val timeEnd = System.currentTimeMillis()
         val totalTimeSec = (timeEnd - timeStart) / 1000L
-        Analytics.complete(totalTimeSec)
+        Analytics.complete(totalTimeSec, needCleanAndRebuild)
 
         Log.i("")
         val formattedTime = Utils.formatSecToMinSec(totalTimeSec)
         Utils.printTextInFrame("Build & deploy complete in $formattedTime")
     }
 
-    private fun selectInputConfiguration(vararg args: String): Configuration {
+    private fun cleanup() {
+        val deviceId = selectAndroidDevice()
+
+        StringBuilder("cat << EOF | ${Params.ADB_TOOL_PATH} -s $deviceId shell\n")
+            .append("run-as sinet.startup.inDriver\n")
+            .append("rm -rf code_cache\n")
+            .append("EOF\n")
+            .toString()
+            .let { cmd ->
+                exec(cmd).let { result ->
+                    if (!result.successful) {
+                        error("Failed to do cleanup for $PACKAGE_NAME")
+                    }
+                }
+            }
+        restartApp(deviceId = deviceId, packageName = PACKAGE_NAME, componentName = COMPONENT_NAME)
+        Analytics.cleanup()
+        Log.i("\nCleanup complete for $PACKAGE_NAME")
+    }
+
+    private fun getAndroidOSVersion(deviceId: String): String {
+        exec("${Params.ADB_TOOL_PATH} -s $deviceId shell getprop ro.build.version.release").let { result ->
+            if (result.successful) {
+                return result.output.first()
+            } else {
+                error("Failed to get Android OS version on device")
+            }
+        }
+    }
+
+    private fun getAndroidApiLevel(deviceId: String): Int {
+        exec("${Params.ADB_TOOL_PATH} -s $deviceId shell getprop ro.build.version.sdk").let { result ->
+            if (result.successful) {
+                return result.output.first().toInt()
+            } else {
+                error("Failed to get Android API level on device")
+            }
+        }
+    }
+
+    /**
+     * @return Selected configuration or null in case of cleanup patches on Android device
+     */
+    private fun selectInputConfiguration(vararg args: String): Configuration? {
         val configs = JsonConfigParser(CONFIG_JSON_PATH)
             .parse()
             .associateBy(Configuration::name)
 
         check(configs.isNotEmpty()) { "JSON config file is empty" }
-        var configName = args.getOrNull(0)
+        var firstArg = args.getOrNull(0)
 
-        if (configName == null) {
-            Log.i("\nSelect configuration:")
+        if (firstArg == null) {
+            Log.i("\nSelect configuration or type empty value to clean patch on Android device:")
             val entries = configs.entries.toList()
 
             entries.forEachIndexed { index, entry ->
                 Log.i(" $index -> ${entry.key}")
             }
             Log.i("\nEnter: ", newLine = false)
-            val index = checkNotNull(readln().toIntOrNull()) { "Invalid input value" }
-            configName = checkNotNull(entries.getOrNull(index)?.key) { "Input value out of bounds [0..${entries.size - 1}]" }
+            val line = readln()
+
+            if (line.isBlank()) {
+                return null
+            }
+            val index = checkNotNull(line.toIntOrNull()) { "Invalid input value" }
+            firstArg = checkNotNull(entries.getOrNull(index)?.key) { "Input value out of bounds [0..${entries.size - 1}]" }
+
+        } else if (firstArg == "-c") {
+            return null
         }
-        return checkNotNull(configs[configName]) { "No configuration found: $configName" }
+        return checkNotNull(configs[firstArg]) { "No configuration found: $firstArg" }
     }
 
     private fun selectAndroidDevice(): String {
@@ -152,7 +217,7 @@ internal class GreenCat {
         return false
     }
 
-    private fun build(config: Configuration) {
+    private fun build(config: Configuration): Boolean {
         val modulesParam = config.modules.joinToString(separator = ",")
         val cmd = StringBuilder("./gradlew ")
             .append("-Dorg.gradle.daemon=$KEEP_GRADLE_DAEMON_ALIVE ")
@@ -169,22 +234,25 @@ internal class GreenCat {
             }
         }
         if (needCleanAndRebuild) {
-            Log.i("\n--------------------------------------")
-            Log.i("[!] Need to make clean and rebuild [!]")
-            Log.i("--------------------------------------\n")
+            Log.i("\n----------------------------------------------------------")
+            Log.i("          [!] Need to make clean and rebuild [!]          ")
+            Log.i("----------------------------------------------------------\n")
             result = exec("pkill java; ./gradlew clean; $cmd", print = true)
         }
         if (!result.successful) {
             error("Build failed")
         }
+        return needCleanAndRebuild
     }
 
     private fun deploy(config: Configuration, deviceId: String) {
+        // Find all classes.dex for the included modules
         val dexList = config.modules
             .map { moduleName ->
                 val path = findClassesDex(moduleName)
                 checkNotNull(path) { "No classes.dex found for module $moduleName" }
             }
+        // Push all classes.dex to /data/local/tmp
         dexList.forEachIndexed { index, path ->
             exec("${Params.ADB_TOOL_PATH} -s $deviceId push $path /data/local/tmp/classes$index.dex").let { result ->
                 if (!result.successful) {
@@ -192,13 +260,15 @@ internal class GreenCat {
                 }
             }
         }
-        exec("${Params.ADB_TOOL_PATH} -s $deviceId push $AGENT_ZIP_PATH /data/local/tmp").let { result ->
+        // Push zipped agent to /data/local/tmp
+        exec("${Params.ADB_TOOL_PATH} -s $deviceId push $AGENT_ZIP_NAME /data/local/tmp").let { result ->
             if (result.successful) {
                 Log.d("Push agent complete")
             } else {
                 error("Failed to push agent on device")
             }
         }
+        // Deploy agent with classes.dex in application private storage
         StringBuilder("cat << EOF | ${Params.ADB_TOOL_PATH} -s $deviceId shell\n")
             .append("run-as sinet.startup.inDriver\n")
             .append("rm -rf code_cache\n")
@@ -221,6 +291,19 @@ internal class GreenCat {
                     }
                 }
             }
+        // Do cleanup in /data/local/tmp
+        exec("${Params.ADB_TOOL_PATH} -s $deviceId shell rm /data/local/tmp/$AGENT_ZIP_NAME").let { result ->
+            if (!result.successful) {
+                error("Failed to remove agent from device")
+            }
+        }
+        dexList.indices.forEach { index ->
+            exec("${Params.ADB_TOOL_PATH} -s $deviceId shell rm /data/local/tmp/classes$index.dex").let { result ->
+                if (!result.successful) {
+                    error("Failed to remove classes.dex from device")
+                }
+            }
+        }
         restartApp(deviceId = deviceId, packageName = PACKAGE_NAME, componentName = COMPONENT_NAME)
     }
 
