@@ -7,6 +7,7 @@ import ru.fomenkov.plugin.compiler.Params
 import ru.fomenkov.shell.Shell.exec
 import ru.fomenkov.utils.*
 import java.io.File
+import java.nio.file.Files
 import kotlin.math.max
 
 private const val BASE_PATH = "tools/greencat"
@@ -23,7 +24,7 @@ private const val MIN_ANDROID_API_LEVEL = 26 // Android 8.0
 
 fun main(vararg args: String) {
     try {
-        GreenCat().launch(*args)
+        GreenCat().launch(needDeploy = true, *args)
     } catch (e: Throwable) {
         val message = e.localizedMessage
         val title = "* * * EXECUTION ERROR * * *"
@@ -41,7 +42,7 @@ fun main(vararg args: String) {
 
 internal class GreenCat {
 
-    fun launch(vararg args: String) {
+    fun launch(needDeploy: Boolean = true, vararg args: String) {
         Analytics.launch()
         Log.level = Log.Level.INFO
         Log.i("GreenCat v${Settings.GREENCAT_VERSION}")
@@ -69,16 +70,25 @@ internal class GreenCat {
         Log.i("Running configuration '${config.name}' on device '$deviceId' (Android $osVersion, API $apiLevel)\n")
 
         val needCleanAndRebuild = build(config)
-        Log.i("Deploying patch files...")
-        deploy(config, deviceId)
 
+        if (needDeploy) {
+            Log.i("Deploying patch files...")
+            deploy(config, deviceId)
+        } else {
+            Log.i("Skip deploy")
+        }
         val timeEnd = System.currentTimeMillis()
         val totalTimeSec = (timeEnd - timeStart) / 1000L
         Analytics.complete(totalTimeSec, needCleanAndRebuild)
 
         Log.i("")
         val formattedTime = Utils.formatSecToMinSec(totalTimeSec)
-        Utils.printTextInFrame("Build & deploy complete in $formattedTime")
+
+        if (needDeploy) {
+            Utils.printTextInFrame("Build & deploy complete in $formattedTime")
+        } else {
+            Utils.printTextInFrame("Build complete in $formattedTime")
+        }
     }
 
     private fun cleanup() {
@@ -131,15 +141,14 @@ internal class GreenCat {
 
         check(configs.isNotEmpty()) { "JSON config file is empty" }
         var firstArg = args.getOrNull(0)
+        val entries = configs.entries.toList()
 
         if (firstArg == null) {
             Log.i("\nSelect configuration or type empty value to clean patch on Android device:")
-            val entries = configs.entries.toList()
-
             entries.forEachIndexed { index, entry ->
                 Log.i(" $index -> ${entry.key}")
             }
-            Log.i("\nEnter: ", newLine = false)
+            Log.i("\nEnter [0 - ${entries.size - 1}]: ", newLine = false)
             val line = readln()
 
             if (line.isBlank()) {
@@ -151,7 +160,18 @@ internal class GreenCat {
         } else if (firstArg == "-c") {
             return null
         }
-        return checkNotNull(configs[firstArg]) { "No configuration found: $firstArg" }
+        var configuration = configs[firstArg]
+
+        if (configuration != null) {
+            return configuration
+        }
+        val index = checkNotNull(firstArg.toIntOrNull()) { "No configuration found: $firstArg" }
+        configuration = entries.getOrNull(index)?.value
+
+        if (configuration != null) {
+            Log.i("Selecting configuration: ${configuration.name}")
+        }
+        return checkNotNull(configuration) { "Incorrect index: $index" }
     }
 
     private fun selectAndroidDevice(): String {
@@ -212,7 +232,7 @@ internal class GreenCat {
 
     private fun isFileInScope(filePath: String, modulePaths: List<String>): Boolean {
         modulePaths.forEach { modulePath ->
-            if (filePath.startsWith(modulePath)) {
+            if (filePath.startsWith(modulePath) || filePath.startsWith(BASE_PATH)) {
                 return true
             }
         }
@@ -249,19 +269,48 @@ internal class GreenCat {
 
     private fun deploy(config: Configuration, deviceId: String) {
         // Find all classes.dex for the included modules
-        val dexList = config.modules
-            .map { moduleName ->
-                val path = findClassesDex(moduleName)
-                checkNotNull(path) { "No classes.dex found for module $moduleName" }
-            }
-        // Push all classes.dex to /data/local/tmp
-        dexList.forEachIndexed { index, path ->
-            exec("${Params.ADB_TOOL_PATH} -s $deviceId push $path /data/local/tmp/classes$index.dex").let { result ->
-                if (!result.successful) {
-                    error("Failed to push $path on device")
-                }
+        val localDexPaths = config.modules.map { moduleName ->
+            checkNotNull(findClassesDex(moduleName)) { "No classes.dex found for module $moduleName" }
+        }
+        val tmpDirPath = Files.createTempDirectory("patch_").toAbsolutePath()
+        val zipFilePath = "$tmpDirPath/patch.zip"
+
+        // Zip all classes.dex into patch
+        exec("zip $zipFilePath ${localDexPaths.joinToString(separator = " ")}").let { result ->
+            if (!result.successful) {
+                result.output.forEach(Log::i)
+                error("Failed to zip classes.dex file(s)")
             }
         }
+
+        // Push patch to /data/local/tmp
+        exec("${Params.ADB_TOOL_PATH} -s $deviceId push $zipFilePath /data/local/tmp/patch.zip").let { result ->
+            if (!result.successful) {
+                result.output.forEach(Log::i)
+                error("Failed to push $zipFilePath to the device")
+            }
+        }
+
+        // Unzip all classes.dex
+        exec("${Params.ADB_TOOL_PATH} -s $deviceId shell 'cd /data/local/tmp; rm -rf patch; unzip patch.zip -d patch'").let { result ->
+            if (!result.successful) {
+                result.output.forEach(Log::i)
+                error("Failed to unzip patch on the device")
+            }
+        }
+
+        // List all unzipped classes.dex files
+        val deviceDexPaths = mutableListOf<String>()
+
+        exec("${Params.ADB_TOOL_PATH} -s $deviceId shell find /data/local/tmp/patch -name 'classes.dex'").let { result ->
+            if (result.successful) {
+                deviceDexPaths += result.output.filter { path -> path.trim().endsWith(".dex") }
+            } else {
+                result.output.forEach(Log::i)
+                error("Failed to list all classes.dex on the device")
+            }
+        }
+
         // Push zipped agent to /data/local/tmp
         exec("${Params.ADB_TOOL_PATH} -s $deviceId push $AGENT_ZIP_PATH /data/local/tmp").let { result ->
             if (result.successful) {
@@ -270,42 +319,40 @@ internal class GreenCat {
                 error("Failed to push agent on device")
             }
         }
+
         // Deploy agent with classes.dex in application private storage
         StringBuilder("cat << EOF | ${Params.ADB_TOOL_PATH} -s $deviceId shell\n")
             .append("run-as sinet.startup.inDriver\n")
             .append("rm -rf code_cache\n")
-            .append("tar zxf /data/local/tmp/cc.tar.gz -C .\n")
+            .append("tar zxf /data/local/tmp/$AGENT_ZIP_NAME -C .\n")
             .apply {
-                dexList.indices.forEach { index ->
-                    append("cp /data/local/tmp/classes$index.dex code_cache/.overlay/base.apk\n")
+                deviceDexPaths.forEachIndexed { i, path ->
+                    append("cp $path code_cache/.overlay/base.apk/classes$i.dex\n")
                 }
             }
             .append("EOF\n")
             .toString()
             .let { cmd ->
                 exec(cmd).let { result ->
-                    result.output.forEach(::println)
+                    result.output.forEach(Log::i)
 
-                    if (result.successful) {
-                        Log.d("Deploy agent complete")
-                    } else {
-                        error("Failed to deploy agent on device")
+                    if (!result.successful) {
+                        error("Failed to deploy agent and patch on the device")
                     }
                 }
             }
+
         // Do cleanup in /data/local/tmp
-        exec("${Params.ADB_TOOL_PATH} -s $deviceId shell rm /data/local/tmp/$AGENT_ZIP_NAME").let { result ->
-            if (!result.successful) {
-                error("Failed to remove agent from device")
-            }
-        }
-        dexList.indices.forEach { index ->
-            exec("${Params.ADB_TOOL_PATH} -s $deviceId shell rm /data/local/tmp/classes$index.dex").let { result ->
-                if (!result.successful) {
-                    error("Failed to remove classes.dex from device")
+        StringBuilder("${Params.ADB_TOOL_PATH} -s $deviceId shell 'cd /data/local/tmp; ")
+            .append("rm -rf patch patch.zip $AGENT_ZIP_NAME'")
+            .toString()
+            .let { cmd ->
+                exec(cmd).let { result ->
+                    if (!result.successful) {
+                        error("Failed to do cleanup on the device")
+                    }
                 }
             }
-        }
         restartApp(deviceId = deviceId, packageName = PACKAGE_NAME, componentName = COMPONENT_NAME)
     }
 
@@ -318,14 +365,18 @@ internal class GreenCat {
         if (!transformDir.exists()) {
             return null
         }
+        var dexFilePath: String? = null
+        var lastModified = 0L
+
         transformDir.list()?.forEach { hash ->
             val dexFile = File("${transformDir.path}/$hash/transformed/classes/classes_dex/classes.dex")
 
-            if (dexFile.exists()) {
-                return dexFile.absolutePath
+            if (dexFile.exists() && dexFile.lastModified() > lastModified) {
+                dexFilePath = dexFile.absolutePath
+                lastModified = dexFile.lastModified()
             }
         }
-        return null
+        return dexFilePath
     }
 
     private fun getProjectGitDiffFiles(): Pair<String, Set<String>> {
