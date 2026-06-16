@@ -53,7 +53,9 @@ internal class GreenCat {
             cleanup()
             return
         }
-        val deviceId = selectAndroidDevice()
+        val deviceId = args.firstOrNull { arg -> arg.startsWith("device=") }
+            ?.substring(7)
+            ?.also { id -> Log.i("Selected device ID = $id") } ?: selectAndroidDevice()
         val timeStart = System.currentTimeMillis()
 
         if (GIT_DIFF_SCOPE_CHECK_ENABLED) {
@@ -73,7 +75,7 @@ internal class GreenCat {
 
         if (needDeploy) {
             Log.i("Deploying patch files...")
-            deploy(config, deviceId)
+            deploy(deviceId)
         } else {
             Log.i("Skip deploy")
         }
@@ -267,13 +269,12 @@ internal class GreenCat {
         return needCleanAndRebuild
     }
 
-    private fun deploy(config: Configuration, deviceId: String) {
-        // Find all classes.dex for the included modules
-        val localDexPaths = config.modules.map { moduleName ->
-            checkNotNull(findClassesDex(moduleName)) { "No classes.dex found for module $moduleName" }
-        }
+    private fun deploy(deviceId: String) {
+        // Find all classes.dex from the main module
+        val localDexPaths = findClassesDex(GRADLE_MODULE_NAME)
         val tmpDirPath = Files.createTempDirectory("patch_").toAbsolutePath()
         val zipFilePath = "$tmpDirPath/patch.zip"
+        check(localDexPaths.isNotEmpty()) { "No classes.dex found for module $GRADLE_MODULE_NAME" }
 
         // Zip all classes.dex into patch
         exec("zip $zipFilePath ${localDexPaths.joinToString(separator = " ")}").let { result ->
@@ -356,27 +357,21 @@ internal class GreenCat {
         restartApp(deviceId = deviceId, packageName = PACKAGE_NAME, componentName = COMPONENT_NAME)
     }
 
-    private fun findClassesDex(moduleName: String): String? {
-        val transformDir = moduleName.split(':')
-            .filterNot(String::isBlank)
-            .joinToString(separator = "/")
-            .let { path -> File("$path/build/.transforms") }
+    private fun findClassesDex(moduleName: String): List<String> {
+        val dexFilePaths = mutableListOf<String>()
 
-        if (!transformDir.exists()) {
-            return null
-        }
-        var dexFilePath: String? = null
-        var lastModified = 0L
-
-        transformDir.list()?.forEach { hash ->
-            val dexFile = File("${transformDir.path}/$hash/transformed/classes/classes_dex/classes.dex")
-
-            if (dexFile.exists() && dexFile.lastModified() > lastModified) {
-                dexFilePath = dexFile.absolutePath
-                lastModified = dexFile.lastModified()
+        exec("find $moduleName/build -name '*.dex'").let { result ->
+            if (result.successful.not()) {
+                error("Failed to list classes.dex in directory $moduleName/build")
             }
+            dexFilePaths += result.output
+                .filter { path -> "/debug/" in path }
+                // Runtime exception with
+                // incremental-build/build/intermediates/dex/debug/mergeProjectDexDebug/0/classes.dex
+                // It contains R files
+                .filterNot { path -> "/mergeProjectDexDebug/" in path }
         }
-        return dexFilePath
+        return dexFilePaths
     }
 
     private fun getProjectGitDiffFiles(): Pair<String, Set<String>> {

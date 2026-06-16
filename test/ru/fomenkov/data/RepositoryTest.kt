@@ -3,7 +3,6 @@ package ru.fomenkov.data
 import org.junit.Assert.*
 import org.junit.Before
 import org.junit.Test
-import ru.fomenkov.Settings
 import ru.fomenkov.utils.Log
 import ru.fomenkov.utils.Utils
 
